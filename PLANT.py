@@ -34,42 +34,50 @@ def draw_digital_display(value, image_filename, is_frequency=False):
             font_size = int(png_img.size[1] * 0.085) 
             text_color = (0, 240, 255, 255) # Cyan
             
-        # --- STREAMLIT CLOUD BULLETPROOF FONT ENGINE ---
+        # --- FIXED FONT ENGINE ADAPTED FROM DEMAND.PY ---
+        font_loaded = False
         font = None
-        # Explicitly checking root directory paths for deployed instances
+        
+        # Try loading TrueType files from root context paths
         possible_paths = [
             "arialbd.ttf", 
             "./arialbd.ttf",
-            os.path.join(os.path.dirname(__file__), "arialbd.ttf")
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "arialbd.ttf")
         ]
         
         for path in possible_paths:
             if os.path.exists(path):
                 try:
                     font = ImageFont.truetype(path, font_size)
+                    font_loaded = True
                     break
-                except IOError:
-                    continue
+                except Exception:
+                    pass
                     
-        # --- ADVANCED SEAMLESS LINUX SERVER FALLBACK ENGINE ---
-        # If the server is strictly blocking custom files, we generate an ultra-bold 
-        # pseudo-vector text block by over-sampling the coordinate offsets
-        if font is None:
-            font = ImageFont.load_default()
-            # If we fall back to system default, we significantly increase the stroke
-            # distribution matrix to manually build a bold, readable layout
-            stroke_weight = range(-5, 6)
-        else:
-            stroke_weight = range(-3, 4)
+        # Fallback processing architecture exactly matching DEMAND.py logic
+        if not font_loaded:
+            try:
+                font = ImageFont.truetype("LiberationSans-Bold.ttf", font_size)
+                font_loaded = True
+            except IOError:
+                pass
+                
+        if not font_loaded:
+            base_font = ImageFont.load_default()
+            try:
+                # Forcefully scales the system layout so characters do not shrink on the web
+                font = base_font.font_variant(size=font_size)
+            except AttributeError:
+                font = base_font
         # ------------------------------------------------------
             
-        # Heavy anti-aliased dark background shadow layer to bounce the color forward
-        for ax in stroke_weight:
-            for ay in stroke_weight:
+        # Clear thick text outline border for high contrast readability
+        for ax in [-3, -2, -1, 0, 1, 2, 3]:
+            for ay in [-3, -2, -1, 0, 1, 2, 3]:
                 if ax != 0 or ay != 0:
                     draw.text((center_x + ax, center_y + ay), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
                     
-        # Crisp foreground metric color layer
+        # Sharp foreground metric color layer
         draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
                 
         return Image.alpha_composite(base_img, overlay)
