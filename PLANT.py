@@ -11,7 +11,8 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 def draw_digital_display(value, image_filename, is_frequency=False):
-    image_path ={image_filename}"
+    # CHANGED: Read files directly from the repository root directory
+    image_path = image_filename
     try:
         png_img = Image.open(image_path).convert("RGBA")
         solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
