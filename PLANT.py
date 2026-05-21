@@ -21,36 +21,41 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
+        # Exact display box centers
         center_x = png_img.size[0] * 0.485
         center_y = png_img.size[1] * 0.825
         
         if is_frequency:
             display_text = f"{value} Hz"
-            font_size = int(png_img.size[1] * 0.082)
+            # BOOSTED: Increased font size multiplier for higher visibility
+            font_size = int(png_img.size[1] * 0.095) 
             text_color = (0, 35, 102, 255)  # Royal Blue
         else:
             display_text = f"{value} MW"
-            font_size = int(png_img.size[1] * 0.065)
+            # BOOSTED: Increased font size multiplier to fill the dial slot cleanly
+            font_size = int(png_img.size[1] * 0.085) 
             text_color = (0, 240, 255, 255) # Cyan
             
-        # --- FIXED LINUX CLOUD FONT LOADER SYSTEM ---
-        font = None
-        font_choices = ["LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf", "arialbd.ttf"]
-        
-        for font_name in font_choices:
+        # --- BULLETPROOF REPO-BASED FONT LOADING ---
+        try:
+            # Reads the font directly from your GitHub directory
+            font = ImageFont.truetype("arialbd.ttf", font_size)
+        except IOError:
+            # Fallback if font isn't uploaded yet
             try:
-                font = ImageFont.truetype(font_name, font_size)
-                break
+                font = ImageFont.truetype("LiberationSans-Bold.ttf", font_size)
             except IOError:
-                continue
-                
-        if font is None:
-            font = ImageFont.load_default()
-        # ---------------------------------------------
+                font = ImageFont.load_default()
+        # --------------------------------------------
             
-        for ax in [-2, -1, 0, 1, 2]:
-            for ay in [-2, -1, 0, 1, 2]:
-                draw.text((center_x + ax, center_y + ay), display_text, fill=text_color, font=font, anchor="mm")
+        # Clear thick text outline border for extreme readability
+        for ax in [-3, -2, -1, 0, 1, 2, 3]:
+            for ay in [-3, -2, -1, 0, 1, 2, 3]:
+                if ax != 0 or ay != 0:
+                    draw.text((center_x + ax, center_y + ay), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
+                    
+        # Sharp foreground text
+        draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
                 
         return Image.alpha_composite(base_img, overlay)
     except Exception:
