@@ -4,14 +4,13 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
+st.title("⚡ NCTPS1MW LIVE PLANT DATA")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 def draw_digital_display(value, image_filename, is_frequency=False):
-    # CHANGED: Read files directly from the repository root directory
     image_path = image_filename
     try:
         png_img = Image.open(image_path).convert("RGBA")
@@ -34,10 +33,20 @@ def draw_digital_display(value, image_filename, is_frequency=False):
             font_size = int(png_img.size[1] * 0.065)
             text_color = (0, 240, 255, 255) # Cyan
             
-        try:
-            font = ImageFont.truetype("arialbd.ttf", font_size)
-        except IOError:
+        # --- FIXED LINUX CLOUD FONT LOADER SYSTEM ---
+        font = None
+        font_choices = ["LiberationSans-Bold.ttf", "DejaVuSans-Bold.ttf", "arialbd.ttf"]
+        
+        for font_name in font_choices:
+            try:
+                font = ImageFont.truetype(font_name, font_size)
+                break
+            except IOError:
+                continue
+                
+        if font is None:
             font = ImageFont.load_default()
+        # ---------------------------------------------
             
         for ax in [-2, -1, 0, 1, 2]:
             for ay in [-2, -1, 0, 1, 2]:
