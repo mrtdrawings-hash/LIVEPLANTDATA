@@ -47,10 +47,13 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
 
 def draw_vector_string(draw, text, cx, cy, color):
     """Aligns and scales massive digital strings precisely into the geometric center."""
-    digit_w = 46       
-    digit_h = 80       
-    thickness = 11      
-    spacing = 10       
+    # ------------------------------------------------------------------
+    # FONT SIZE INCREASED: Enlarged dimensions to fill the dial area completely
+    # ------------------------------------------------------------------
+    digit_w = 64       
+    digit_h = 110       
+    thickness = 15      
+    spacing = 12       
     
     total_w = len(text) * (digit_w + spacing) - spacing
     start_x = cx - (total_w / 2)
@@ -62,7 +65,6 @@ def draw_vector_string(draw, text, cx, cy, color):
             draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
         curr_x += digit_w + spacing
 
-# Using **kwargs ensures this function is 100% immune to signature/cache mismatches
 def draw_digital_display(value, image_filename, **kwargs):
     try:
         png_img = Image.open(image_filename).convert("RGBA")
