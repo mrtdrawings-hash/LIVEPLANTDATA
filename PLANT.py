@@ -76,9 +76,9 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         else:
             display_text = f"{value} MW"
             font_size = int(png_img.size[1] * 0.085) 
-            text_color = (255, 255, 255, 255) # White (Changed from Cyan)
+            text_color = (255, 255, 255, 255) # White Font
             
-        # --- FIXED FONT ENGINE ADAPTED FROM DEMAND.PY ---
+        # --- FIXED FONT ENGINE WITH CORRECTED SYNTAX ---
         font_loaded = False
         font = None
         
@@ -98,7 +98,13 @@ def draw_digital_display(value, image_filename, is_frequency=False):
                 except Exception:
                     pass
                     
-        # Fallback processing architecture exactly matching DEMAND.py logic
         if not font_loaded:
             try:
-                font = ImageFont.truetype
+                font = ImageFont.truetype("LiberationSans-Bold.ttf", font_size)
+                font_loaded = True
+            except Exception:
+                pass
+                
+        if not font_loaded:
+            try:
+                font = ImageFont
