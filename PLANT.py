@@ -62,11 +62,8 @@ def draw_vector_string(draw, text, cx, cy, color):
             draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
         curr_x += digit_w + spacing
 
-def draw_digital_display(value, image_filename):
-    """
-    Accepts exactly two positional arguments to match old caching environments
-    while dynamically checking filenames to apply correct display profiles.
-    """
+# Using **kwargs ensures this function is 100% immune to signature/cache mismatches
+def draw_digital_display(value, image_filename, **kwargs):
     try:
         png_img = Image.open(image_filename).convert("RGBA")
         solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
@@ -83,8 +80,14 @@ def draw_digital_display(value, image_filename):
         # Only passing raw numbers (no units text string)
         display_text = f"{value}"
         
-        # Dynamically determine color profile via image filename
+        # Safely read our state tracking configuration flag
+        is_frequency = kwargs.get('is_frequency', False)
+        
+        # Fallback keyword extraction check via image name properties
         if "HZ" in image_filename.upper() or "HZ" in value:
+            is_frequency = True
+            
+        if is_frequency:
             text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
         else:
             text_color = (0, 240, 255, 255)  # Electric Cyan
@@ -125,11 +128,34 @@ try:
         # UNIT 1
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg")
+            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
             if img1:
                 i1.image(img1, use_container_width=True, clamp=True)
 
         # UNIT 2
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val,
+            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+            if img2:
+                i2.image(img2, use_container_width=True, clamp=True)
+
+        # UNIT 3
+        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        if u3_val != "N/A":
+            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+            if img3:
+                i3.image(img3, use_container_width=True, clamp=True)
+
+        # GRID FREQUENCY
+        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        if hz_val != "N/A":
+            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+            if img4:
+                i4.image(img4, use_container_width=True, clamp=True)
+
+except Exception as e:
+    st.error(f"Connection Error: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
