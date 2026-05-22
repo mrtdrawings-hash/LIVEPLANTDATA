@@ -47,9 +47,6 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
 
 def draw_vector_string(draw, text, cx, cy, color):
     """Aligns and scales massive digital strings precisely into the geometric center."""
-    # ------------------------------------------------------------------
-    # FONT SIZE MAXIMIZED: Increased sizes dramatically to match the template image
-    # ------------------------------------------------------------------
     digit_w = 46       
     digit_h = 80       
     thickness = 11      
@@ -85,6 +82,7 @@ def draw_vector_string(draw, text, cx, cy, color):
                 draw.rectangle([curr_x + 10, start_y + 30, curr_x + digit_w - 10, start_y + digit_h - 10], fill=color)
         curr_x += digit_w + spacing
 
+# Fixed: Added is_frequency=False parameter directly inside function signature declaration
 def draw_digital_display(value, image_filename, is_frequency=False):
     try:
         png_img = Image.open(image_filename).convert("RGBA")
@@ -95,7 +93,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
-        # 🎯 GEOMETRIC DEAD CENTER ALIGNMENT FOR ALL IMAGES
+        # Centering layout coordinates at the exact middle of the images
         center_x = png_img.size[0] * 0.50
         center_y = png_img.size[1] * 0.50
         
@@ -106,7 +104,6 @@ def draw_digital_display(value, image_filename, is_frequency=False):
             display_text = f"{value} MW"
             text_color = (0, 240, 255, 255) # Electric Cyan
             
-        # Draw clean geometric digital string layouts
         draw_vector_string(draw, display_text, center_x, center_y, text_color)
                 
         return Image.alpha_composite(base_img, overlay)
@@ -115,7 +112,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent layout placeholders to eliminate page refresh flickering completely
+# Permanent display components frame setup
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -145,4 +142,32 @@ try:
         if u1_val != "N/A":
             img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
             if img1:
-                i1.image(img1, use_container_width=True,
+                i1.image(img1, use_container_width=True, clamp=True)
+
+        # UNIT 2
+        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
+        if u2_val != "N/A":
+            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+            if img2:
+                i2.image(img2, use_container_width=True, clamp=True)
+
+        # UNIT 3
+        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        if u3_val != "N/A":
+            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+            if img3:
+                i3.image(img3, use_container_width=True, clamp=True)
+
+        # GRID FREQUENCY
+        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        if hz_val != "N/A":
+            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+            if img4:
+                i4.image(img4, use_container_width=True, clamp=True)
+
+except Exception as e:
+    st.error(f"Connection Error: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
