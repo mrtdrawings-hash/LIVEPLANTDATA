@@ -60,29 +60,8 @@ def draw_vector_string(draw, text, cx, cy, color):
     for char in text:
         if char in '0123456789.-':
             draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
-        else:
-            # High-visibility block letters for MW and Hz
-            if char == 'M':
-                draw.rectangle([curr_x, start_y, curr_x + 10, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x + digit_w - 10, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x, start_y, curr_x + digit_w, start_y + 10], fill=color)
-                draw.rectangle([curr_x + digit_w/2 - 5, start_y, curr_x + digit_w/2 + 5, start_y + digit_h], fill=color)
-            elif char == 'W':
-                draw.rectangle([curr_x, start_y, curr_x + 10, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x + digit_w - 10, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x, start_y + digit_h - 10, curr_x + digit_w, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x + digit_w/2 - 5, start_y + 25, curr_x + digit_w/2 + 5, start_y + digit_h], fill=color)
-            elif char == 'H':
-                draw.rectangle([curr_x, start_y, curr_x + 10, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x + digit_w - 10, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x, start_y + digit_h/2 - 5, curr_x + digit_w, start_y + digit_h/2 + 5], fill=color)
-            elif char == 'z':
-                draw.rectangle([curr_x, start_y + 20, curr_x + digit_w, start_y + 30], fill=color)
-                draw.rectangle([curr_x, start_y + digit_h - 10, curr_x + digit_w, start_y + digit_h], fill=color)
-                draw.rectangle([curr_x + 10, start_y + 30, curr_x + digit_w - 10, start_y + digit_h - 10], fill=color)
         curr_x += digit_w + spacing
 
-# Fixed: Added is_frequency=False parameter directly inside function signature declaration
 def draw_digital_display(value, image_filename, is_frequency=False):
     try:
         png_img = Image.open(image_filename).convert("RGBA")
@@ -97,11 +76,12 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         center_x = png_img.size[0] * 0.50
         center_y = png_img.size[1] * 0.50
         
+        # Units removed: Only passing raw value string to the renderer
+        display_text = f"{value}"
+        
         if is_frequency:
-            display_text = f"{value} Hz"
             text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
         else:
-            display_text = f"{value} MW"
             text_color = (0, 240, 255, 255) # Electric Cyan
             
         draw_vector_string(draw, display_text, center_x, center_y, text_color)
@@ -141,33 +121,4 @@ try:
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
             img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True, clamp=True)
-
-        # UNIT 2
-        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
-        if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True, clamp=True)
-
-        # UNIT 3
-        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
-        if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True, clamp=True)
-
-        # GRID FREQUENCY
-        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
-        if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True, clamp=True)
-
-except Exception as e:
-    st.error(f"Connection Error: {e}")
-
-if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+            if img
