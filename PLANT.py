@@ -33,7 +33,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
             display_text = f"{value} MW"
             font_size = int(png_img.size[1] * 0.085) 
             
-        text_color = (255, 255, 255, 255) # White font color for all displays
+        text_color = (255, 255, 255, 255) # Pure White font color for all displays
             
         # --- ROBUST SCALED BITMAP FONT SYSTEM ---
         default_font = ImageFont.load_default()
@@ -49,26 +49,39 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         th = max(1, th)
         
         # Create a temporary canvas for scaling
-        pad = 6  
+        pad = 10  
         text_canvas = Image.new("RGBA", (tw + pad * 2, th + pad * 2), (0, 0, 0, 0))
         canvas_draw = ImageDraw.Draw(text_canvas)
         
-        # --- FIXED SYNTAX: FLAT EXTRA-BOLD BORDER & SHADOW DROPS ---
-        # 1. Thick Black Outline Pass for clear background contrast separation
-        offsets_bg = [(-3,-3), (-3,0), (-3,3), (0,-3), (0,3), (3,-3), (3,0), (3,3), (-2,-2), (2,2), (-2,2), (2,-2)]
-        for ox, oy in offsets_bg:
-            canvas_draw.text((pad + ox, pad + oy), display_text, fill=(0, 0, 0, 255), font=default_font)
+        # --- COMPLETELY FLATTENED EXPLICIT BOLD OFFSET DRAWS ---
+        # Draw background contrast outline borders explicitly to stay error-proof
+        canvas_draw.text((pad - 3, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad - 3, pad), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad - 3, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad + 3, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad + 3, pad), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad + 3, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad - 2, pad - 2), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad + 2, pad + 2), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad - 2, pad + 2), display_text, fill=(0, 0, 0, 255), font=default_font)
+        canvas_draw.text((pad + 2, pad - 2), display_text, fill=(0, 0, 0, 255), font=default_font)
             
-        # 2. Multi-layered White Pass to simulate a bold font weight beautifully
-        offsets_fg = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)]
-        for ox, oy in offsets_fg:
-            canvas_draw.text((pad + ox, pad + oy), display_text, fill=text_color, font=default_font)
+        # Draw multiple foreground white layers directly to build a solid bold look
+        canvas_draw.text((pad, pad), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad - 1, pad), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad + 1, pad), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad, pad - 1), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad, pad + 1), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad - 1, pad - 1), display_text, fill=text_color, font=default_font)
+        canvas_draw.text((pad + 1, pad + 1), display_text, fill=text_color, font=default_font)
         
-        # Target scaling map dimensions matching your layout proportions
+        # Target scaling dimensions matching your layout proportions
         target_w = font_size * (tw / 9.0)
         target_h = font_size * (th / 9.0)
         
-        # Scale text up to make it look clean, crisp, and readable on screen
+        # Scale text up to make it look clean, crisp, and bold on screen
         scaled_text = text_canvas.resize((int(target_w), int(target_h)), Image.Resampling.NEAREST)
         
         # Position and paste scaled text layer onto the center coordinates
@@ -76,3 +89,59 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         past_y = int(center_y - (target_h / 2.0))
         overlay.paste(scaled_text, (past_x, past_y), scaled_text)
         # ---------------------------------------------------------------------
+                
+        return Image.alpha_composite(base_img, overlay)
+    except Exception:
+        return None
+
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+
+try:
+    response = requests.get(url)
+    if response.status_code == 200 and (nctps_data := response.json()):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        # Fetch individual data points explicitly without looping patterns to maximize stability
+        u1_val = nctps_data.get("UNIT1", {}).get("MW", "N/A")
+        u2_val = nctps_data.get("UNIT2", {}).get("MW", "N/A")
+        u3_val = nctps_data.get("UNIT3", {}).get("MW", "N/A")
+        hz_val = nctps_data.get("HZ", {}).get("HZ", "N/A")
+        
+        # Render Column 1: Unit 1
+        with col1:
+            st.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
+                if img1:
+                    st.image(img1, use_container_width=True)
+                    
+        # Render Column 2: Unit 2
+        with col2:
+            st.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+                if img2:
+                    st.image(img2, use_container_width=True)
+                    
+        # Render Column 3: Unit 3
+        with col3:
+            st.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+                if img3:
+                    st.image(img3, use_container_width=True)
+                    
+        # Render Column 4: Grid Frequency
+        with col4:
+            st.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+                if img4:
+                    st.image(img4, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Connection Error: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
