@@ -84,24 +84,20 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
-        center_x = png_img.size[0] * 0.485
-        center_y = png_img.size[1] * 0.835
-        
-        # ✅ CLEAN VALUE FORMATTING
-        try:
-            if is_frequency:
-                display_value = f"{round(float(value), 2)}"
-                display_text = f"{display_value} Hz"
-                text_color = (255, 235, 0, 255)
-            else:
-                display_value = f"{int(float(value))}"
-                display_text = f"{display_value} MW"
-                text_color = (0, 240, 255, 255)
-        except:
-            display_text = str(value)
-            text_color = (255, 0, 0, 255)
-        
+        if is_frequency:
+            center_x = png_img.size[0] * 0.495
+            center_y = png_img.size[1] * 0.495
+            display_text = f"{value} Hz"
+            text_color = (255, 235, 0, 255)
+            draw.ellipse([center_x - 70, center_y - 35, center_x + 70, center_y + 35], fill=(255, 255, 255, 255))
+        else:
+            center_x = png_img.size[0] * 0.485
+            center_y = png_img.size[1] * 0.835
+            display_text = f"{value} MW"
+            text_color = (0, 240, 255, 255)
+            
         draw_vector_string(draw, display_text, center_x, center_y, text_color)
+                
         return Image.alpha_composite(base_img, overlay)
     except Exception:
         return None
@@ -127,7 +123,6 @@ try:
     response = requests.get(url)
     if response.status_code == 200 and (nctps_data := response.json()):
         
-        # ✅ FORCE STRING (important for refresh consistency)
         u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
         u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
@@ -136,7 +131,6 @@ try:
         # UNIT 1
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            i1.empty()
             img1 = draw_digital_display(u1_val, "Gemini_U1.jpg")
             if img1:
                 i1.image(img1, use_container_width=True, clamp=True)
@@ -144,7 +138,6 @@ try:
         # UNIT 2
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            i2.empty()
             img2 = draw_digital_display(u2_val, "Gemini_U2.jpg")
             if img2:
                 i2.image(img2, use_container_width=True, clamp=True)
@@ -152,15 +145,13 @@ try:
         # UNIT 3
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
         if u3_val != "N/A":
-            i3.empty()
             img3 = draw_digital_display(u3_val, "Gemini_U3.jpg")
             if img3:
                 i3.image(img3, use_container_width=True, clamp=True)
 
-        # FREQUENCY
+        # GRID FREQUENCY
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         if hz_val != "N/A":
-            i4.empty()
             img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
             if img4:
                 i4.image(img4, use_container_width=True, clamp=True)
