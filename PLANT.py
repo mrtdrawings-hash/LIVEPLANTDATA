@@ -12,13 +12,13 @@ auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     """
-    Renders thick, bold 7-segment style numbers directly onto pixel coordinates.
-    Bypasses all server font system dependencies permanently.
+    Renders sharp, crisp industrial 7-segment digits with crisp flat edges
+    and drop-shadow structure for high-contrast visibility.
     """
     t = thickness
     mid_y = h / 2
     
-    # 7-Segment coordinate line maps: (rel_x, rel_y, width, height)
+    # 7-Segment structural matrix parameters
     segments = {
         'a': (t, 0, w - 2*t, t),              # Top
         'b': (w - t, t, t, mid_y - t),         # Top Right
@@ -36,20 +36,20 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     }
     
     if char == '.':
-        # Enhanced thick decimal point block
+        # Sharp high-visibility decimal block
         draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
         return
 
     active = mapping.get(char, '')
     for seg in active:
         sx, sy, sw, sh = segments[seg]
+        # Crisp high-contrast shadow layer placement
+        draw.rectangle([x + sx + 2, y + sy + 2, x + sx + sw + 2, y + sy + sh + 2], fill=(0, 0, 0, 220))
+        # Crisp solid front text color layer placement
         draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
 
 def draw_vector_string(draw, text, cx, cy, color):
-    """Aligns and scales massive digital strings precisely into the geometric center."""
-    # ------------------------------------------------------------------
-    # FONT SIZE INCREASED: Enlarged dimensions to fill the dial area completely
-    # ------------------------------------------------------------------
+    """Aligns and scales sharp digital strings precisely into the geometric center."""
     digit_w = 64       
     digit_h = 110       
     thickness = 15      
@@ -79,85 +79,13 @@ def draw_digital_display(value, image_filename, **kwargs):
         center_x = png_img.size[0] * 0.50
         center_y = png_img.size[1] * 0.50
         
-        # Only passing raw numbers (no units text string)
+        # Pure numeric string parsing
         display_text = f"{value}"
         
-        # Safely read our state tracking configuration flag
+        # Caching-safe tracking flags to decide output hue attributes
         is_frequency = kwargs.get('is_frequency', False)
-        
-        # Fallback keyword extraction check via image name properties
         if "HZ" in image_filename.upper() or "HZ" in value:
             is_frequency = True
             
         if is_frequency:
-            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-        else:
-            text_color = (0, 240, 255, 255)  # Electric Cyan
-            
-        draw_vector_string(draw, display_text, center_x, center_y, text_color)
-                
-        return Image.alpha_composite(base_img, overlay)
-    except Exception:
-        return None
-
-url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
-
-# Permanent display components frame setup (Eliminates flashing updates)
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    m1 = st.empty()
-    i1 = st.empty()
-with col2:
-    m2 = st.empty()
-    i2 = st.empty()
-with col3:
-    m3 = st.empty()
-    i3 = st.empty()
-with col4:
-    m4 = st.empty()
-    i4 = st.empty()
-
-try:
-    response = requests.get(url)
-    if response.status_code == 200 and (nctps_data := response.json()):
-        
-        u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-        u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-        u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-        hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-        
-        # UNIT 1
-        m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
-        if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True, clamp=True)
-
-        # UNIT 2
-        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
-        if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True, clamp=True)
-
-        # UNIT 3
-        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
-        if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True, clamp=True)
-
-        # GRID FREQUENCY
-        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
-        if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True, clamp=True)
-
-except Exception as e:
-    st.error(f"Connection Error: {e}")
-
-if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+            text_color = (255, 235, 0,
