@@ -48,41 +48,34 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         tw = max(1, tw)
         th = max(1, th)
         
-        # Create a temporary canvas for scaling
-        pad = 10  
+        # Create a temporary canvas for high-definition rendering
+        pad = 12  
         text_canvas = Image.new("RGBA", (tw + pad * 2, th + pad * 2), (0, 0, 0, 0))
         canvas_draw = ImageDraw.Draw(text_canvas)
         
-        # --- COMPLETELY FLATTENED EXPLICIT BOLD OFFSET DRAWS ---
-        # Draw background contrast outline borders explicitly to stay error-proof
-        canvas_draw.text((pad - 3, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad - 3, pad), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad - 3, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad + 3, pad - 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad + 3, pad), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad + 3, pad + 3), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad - 2, pad - 2), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad + 2, pad + 2), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad - 2, pad + 2), display_text, fill=(0, 0, 0, 255), font=default_font)
-        canvas_draw.text((pad + 2, pad - 2), display_text, fill=(0, 0, 0, 255), font=default_font)
+        # --- SMOOTH ULTRA-BOLD HIGH-CONTRAST ENGINE ---
+        # 1. Broad Black Outline Pass for clear separation from backgrounds (Dense matrix layout)
+        offsets_bg = [
+            (-2,-2), (-2,-1), (-2,0), (-2,1), (-2,2),
+            (-1,-2), (-1,-1), (-1,0), (-1,1), (-1,2),
+            (0,-2),  (0,-1),  (0,0),  (0,1),  (0,2),
+            (1,-2),  (1,-1),  (1,0),  (1,1),  (1,2),
+            (2,-2),  (2,-1),  (2,0),  (2,1),  (2,2)
+        ]
+        for ox, oy in offsets_bg:
+            canvas_draw.text((pad + ox, pad + oy), display_text, fill=(0, 0, 0, 255), font=default_font)
             
-        # Draw multiple foreground white layers directly to build a solid bold look
-        canvas_draw.text((pad, pad), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad - 1, pad), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad + 1, pad), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad, pad - 1), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad, pad + 1), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad - 1, pad - 1), display_text, fill=text_color, font=default_font)
-        canvas_draw.text((pad + 1, pad + 1), display_text, fill=text_color, font=default_font)
+        # 2. Multi-pass foreground layer distribution to form clean bold bodies
+        offsets_fg = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)]
+        for ox, oy in offsets_fg:
+            canvas_draw.text((pad + ox, pad + oy), display_text, fill=text_color, font=default_font)
         
         # Target scaling dimensions matching your layout proportions
-        target_w = font_size * (tw / 9.0)
-        target_h = font_size * (th / 9.0)
+        target_w = font_size * (tw / 8.5)
+        target_h = font_size * (th / 8.5)
         
-        # Scale text up to make it look clean, crisp, and bold on screen
-        scaled_text = text_canvas.resize((int(target_w), int(target_h)), Image.Resampling.NEAREST)
+        # Scale text up using LANCZOS antialiasing filter for crisp, smooth, premium fonts
+        scaled_text = text_canvas.resize((int(target_w), int(target_h)), Image.Resampling.LANCZOS)
         
         # Position and paste scaled text layer onto the center coordinates
         past_x = int(center_x - (target_w / 2.0))
