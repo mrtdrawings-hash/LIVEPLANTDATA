@@ -1,94 +1,173 @@
-import cv2
-import numpy as np
-from PIL import Image, ImageDraw
+import streamlit as st
+import requests
 import time
-import math
+from PIL import Image, ImageDraw
 
-# ==============================
-# VECTOR FONT (for digital look)
-# ==============================
-def draw_vector_string(draw, text, x, y, color=(0,255,255), scale=2):
-    font = {
-        '0': [(0,0,1,0),(1,0,1,2),(1,2,0,2),(0,2,0,0)],
-        '1': [(0.5,0,0.5,2)],
-        '2': [(0,0,1,0),(1,0,1,1),(1,1,0,1),(0,1,0,2),(0,2,1,2)],
-        '3': [(0,0,1,0),(1,0,1,2),(0,1,1,1),(0,2,1,2)],
-        '4': [(0,0,0,1),(0,1,1,1),(1,0,1,2)],
-        '5': [(1,0,0,0),(0,0,0,1),(0,1,1,1),(1,1,1,2),(1,2,0,2)],
-        '6': [(1,0,0,0),(0,0,0,2),(0,2,1,2),(1,2,1,1),(1,1,0,1)],
-        '7': [(0,0,1,0),(1,0,0,2)],
-        '8': [(0,0,1,0),(1,0,1,2),(1,2,0,2),(0,2,0,0),(0,1,1,1)],
-        '9': [(1,2,1,0),(1,0,0,0),(0,0,0,1),(0,1,1,1)],
-        '.': [(0.5,2,0.5,2.1)],
-        'M': [(0,2,0,0),(0,0,0.5,1),(0.5,1,1,0),(1,0,1,2)],
-        'W': [(0,0,0.3,2),(0.3,2,0.6,1),(0.6,1,0.9,2),(0.9,2,1.2,0)],
-        'H': [(0,0,0,2),(1,0,1,2),(0,1,1,1)],
-        'z': [(0,0,1,0),(1,0,0,2),(0,2,1,2)]
+st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
+st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
+
+st.sidebar.header("🔄 Refresh Settings")
+refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
+auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
+
+def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
+    t = thickness
+    mid_y = h / 2
+    
+    segments = {
+        'a': (t, 0, w - 2*t, t),
+        'b': (w - t, t, t, mid_y - t),
+        'c': (w - t, mid_y, t, mid_y - t),
+        'd': (t, h - t, w - 2*t, t),
+        'e': (0, mid_y, t, mid_y - t),
+        'f': (0, t, t, mid_y - t),
+        'g': (t, mid_y - t/2, w - 2*t, t)
     }
+    
+    mapping = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
+        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
+        '-': 'g'
+    }
+    
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - t, x + w/2 + t, y + h], fill=color)
+        return
 
-    offset_x = x
+    active = mapping.get(char, '')
+    for seg in active:
+        sx, sy, sw, sh = segments[seg]
+        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+
+def draw_vector_string(draw, text, cx, cy, color):
+    digit_w = 34
+    digit_h = 58
+    thickness = 8
+    spacing = 8
+    
+    total_w = len(text) * (digit_w + spacing) - spacing
+    start_x = cx - (total_w / 2)
+    start_y = cy - (digit_h / 2)
+    
+    curr_x = start_x
     for char in text:
-        if char in font:
-            for line in font[char]:
-                x1 = offset_x + line[0]*20*scale
-                y1 = y + line[1]*20*scale
-                x2 = offset_x + line[2]*20*scale
-                y2 = y + line[3]*20*scale
-                draw.line((x1,y1,x2,y2), fill=color, width=2)
-        offset_x += 30*scale
+        if char in '0123456789.-':
+            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
+        else:
+            if char == 'M':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y, curr_x + digit_w, start_y + 6], fill=color)
+                draw.rectangle([curr_x + digit_w/2 - 3, start_y, curr_x + digit_w/2 + 3, start_y + digit_h], fill=color)
+            elif char == 'W':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h - 6, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w/2 - 3, start_y + 15, curr_x + digit_w/2 + 3, start_y + digit_h], fill=color)
+            elif char == 'H':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h/2 - 3, curr_x + digit_w, start_y + digit_h/2 + 3], fill=color)
+            elif char == 'z':
+                draw.rectangle([curr_x, start_y + 12, curr_x + digit_w, start_y + 18], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h - 6, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + 6, start_y + 18, curr_x + digit_w - 6, start_y + digit_h - 6], fill=color)
+        curr_x += digit_w + spacing
 
-
-# ==============================
-# DRAW FUNCTION
-# ==============================
-def draw_dial(png_path, mw, hz):
+def draw_digital_display(value, image_filename, is_frequency=False):
     try:
-        img = Image.open(png_path).convert("RGBA")
-    except Exception as e:
-        print("Image load error:", e)
+        png_img = Image.open(image_filename).convert("RGBA")
+        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+        solid_bg.paste(png_img, (0, 0), png_img)
+        base_img = solid_bg.convert("RGBA")
+        
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        
+        center_x = png_img.size[0] * 0.485
+        center_y = png_img.size[1] * 0.835
+        
+        # ✅ CLEAN VALUE FORMATTING
+        try:
+            if is_frequency:
+                display_value = f"{round(float(value), 2)}"
+                display_text = f"{display_value} Hz"
+                text_color = (255, 235, 0, 255)
+            else:
+                display_value = f"{int(float(value))}"
+                display_text = f"{display_value} MW"
+                text_color = (0, 240, 255, 255)
+        except:
+            display_text = str(value)
+            text_color = (255, 0, 0, 255)
+        
+        draw_vector_string(draw, display_text, center_x, center_y, text_color)
+        return Image.alpha_composite(base_img, overlay)
+    except Exception:
         return None
 
-    draw = ImageDraw.Draw(img)
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-    w, h = img.size
+col1, col2, col3, col4 = st.columns(4)
 
-    # Center area of dial (adjust if needed)
-    cx = int(w * 0.35)
-    cy = int(h * 0.65)
+with col1:
+    m1 = st.empty()
+    i1 = st.empty()
+with col2:
+    m2 = st.empty()
+    i2 = st.empty()
+with col3:
+    m3 = st.empty()
+    i3 = st.empty()
+with col4:
+    m4 = st.empty()
+    i4 = st.empty()
 
-    # Text
-    mw_text = f"{mw:.1f} MW"
-    hz_text = f"{hz:.2f} Hz"
+try:
+    response = requests.get(url)
+    if response.status_code == 200 and (nctps_data := response.json()):
+        
+        # ✅ FORCE STRING (important for refresh consistency)
+        u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+        u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+        u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+        hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+        
+        # UNIT 1
+        m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
+        if u1_val != "N/A":
+            i1.empty()
+            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg")
+            if img1:
+                i1.image(img1, use_container_width=True, clamp=True)
 
-    # Draw values
-    draw_vector_string(draw, mw_text, cx, cy - 60, (0,255,255), scale=2)
-    draw_vector_string(draw, hz_text, cx, cy + 40, (255,255,0), scale=2)
+        # UNIT 2
+        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
+        if u2_val != "N/A":
+            i2.empty()
+            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg")
+            if img2:
+                i2.image(img2, use_container_width=True, clamp=True)
 
-    return img
+        # UNIT 3
+        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        if u3_val != "N/A":
+            i3.empty()
+            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg")
+            if img3:
+                i3.image(img3, use_container_width=True, clamp=True)
 
+        # FREQUENCY
+        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        if hz_val != "N/A":
+            i4.empty()
+            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+            if img4:
+                i4.image(img4, use_container_width=True, clamp=True)
 
-# ==============================
-# MAIN LOOP
-# ==============================
-PNG_PATH = "your_dial.png"   # <-- PUT YOUR IMAGE NAME HERE
+except Exception as e:
+    st.error(f"Connection Error: {e}")
 
-while True:
-    # Dummy changing values (replace with real sensor data)
-    t = time.time()
-    mw_value = 500 + 100 * math.sin(t)
-    hz_value = 50 + 0.5 * math.sin(t/2)
-
-    img = draw_dial(PNG_PATH, mw_value, hz_value)
-
-    if img is None:
-        break
-
-    # Convert PIL -> OpenCV
-    frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGBA2BGR)
-
-    cv2.imshow("Dial Dashboard", frame)
-
-    if cv2.waitKey(100) & 0xFF == 27:
-        break
-
-cv2.destroyAllWindows()
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
