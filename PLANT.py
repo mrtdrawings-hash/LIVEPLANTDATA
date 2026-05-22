@@ -76,7 +76,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         else:
             display_text = f"{value} MW"
             font_size = int(png_img.size[1] * 0.085) 
-            text_color = (0, 240, 255, 255) # Cyan
+            text_color = (255, 255, 255, 255) # White (Changed from Cyan)
             
         # --- FIXED FONT ENGINE ADAPTED FROM DEMAND.PY ---
         font_loaded = False
@@ -101,58 +101,4 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         # Fallback processing architecture exactly matching DEMAND.py logic
         if not font_loaded:
             try:
-                font = ImageFont.truetype("LiberationSans-Bold.ttf", font_size)
-                font_loaded = True
-            except IOError:
-                pass
-                
-        if not font_loaded:
-            base_font = ImageFont.load_default()
-            try:
-                # Forcefully scales the system layout so characters do not shrink on the web
-                font = base_font.font_variant(size=font_size)
-            except AttributeError:
-                font = base_font
-        # ------------------------------------------------------
-            
-        # Clear thick text outline border for high contrast readability
-        for ax in [-3, -2, -1, 0, 1, 2, 3]:
-            for ay in [-3, -2, -1, 0, 1, 2, 3]:
-                if ax != 0 or ay != 0:
-                    draw.text((center_x + ax, center_y + ay), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
-                    
-        # Sharp foreground metric color layer
-        draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
-                
-        return Image.alpha_composite(base_img, overlay)
-    except Exception:
-        return None
-
-url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
-
-try:
-    response = requests.get(url)
-    if response.status_code == 200 and (nctps_data := response.json()):
-        col1, col2, col3, col4 = st.columns(4)
-        
-        metrics = [
-            (col1, "UNIT1", "UNIT 1 Generation", "Gemini_U1.jpg", False),
-            (col2, "UNIT2", "UNIT 2 Generation", "Gemini_U2.jpg", False),
-            (col3, "UNIT3", "UNIT 3 Generation", "Gemini_U3.jpg", False),
-            (col4, "HZ", "Grid Frequency", "HZ.jpg", True)
-        ]
-        
-        for col, key, label, img_file, is_hz in metrics:
-            with col:
-                val = nctps_data.get(key, {}).get(key if is_hz else "MW", "N/A")
-                st.metric(label=label, value=f"{val} {'Hz' if is_hz else 'MW'}")
-                if val != "N/A":
-                    img_out = draw_digital_display(val, img_file, is_frequency=is_hz)
-                    if img_out:
-                        st.image(img_out, use_container_width=True)
-except Exception as e:
-    st.error(f"Connection Error: {e}")
-
-if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+                font = ImageFont.truetype
