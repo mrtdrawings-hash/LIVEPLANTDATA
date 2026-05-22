@@ -46,11 +46,13 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
 
 def draw_vector_string(draw, text, cx, cy, color):
     """Aligns and scales custom text blocks perfectly inside the gauge window."""
-    # CHANGED: Font scaling sizes bumped up to make the text readings larger
+    # ------------------------------------------------------------------
+    # FONT SIZE UPDATED: Values adjusted upward to make text noticeably larger
+    # ------------------------------------------------------------------
     digit_w = 34       # Increased from 26
     digit_h = 58       # Increased from 46
-    thickness = 8     # Increased from 6
-    spacing = 8       # Increased from 6
+    thickness = 8      # Increased from 6
+    spacing = 8        # Increased from 6
     
     total_w = len(text) * (digit_w + spacing) - spacing
     start_x = cx - (total_w / 2)
@@ -149,4 +151,27 @@ try:
         # Column 2 Engine Execution
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            img2
+            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+            if img2:
+                i2.image(img2, use_container_width=True)
+                
+        # Column 3 Engine Execution
+        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        if u3_val != "N/A":
+            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+            if img3:
+                i3.image(img3, use_container_width=True)
+                
+        # Column 4 Engine Execution
+        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        if hz_val != "N/A":
+            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+            if img4:
+                i4.image(img4, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Connection Error: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
