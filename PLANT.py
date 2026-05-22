@@ -76,9 +76,9 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         else:
             display_text = f"{value} MW"
             font_size = int(png_img.size[1] * 0.085) 
-            text_color = (255, 255, 255, 255) # White Font
+            text_color = (255, 255, 255, 255) # White Font (Changed from Cyan)
             
-        # --- FIXED CLEAN FONT SELECTION ENGINE ---
+        # --- ROBUST SCALED FONT ENGINE TO PREVENT SMALL TEXT ---
         font = None
         possible_paths = [
             "arialbd.ttf", 
@@ -95,18 +95,52 @@ def draw_digital_display(value, image_filename, is_frequency=False):
                 except Exception:
                     pass
                     
-        if font is None:
-            font = ImageFont.load_default()
-        # ------------------------------------------------------
+        if font is not None:
+            # If a proper vector system font is found, use the standard drawing process
+            for ax in [-3, -2, -1, 0, 1, 2, 3]:
+                for ay in [-3, -2, -1, 0, 1, 2, 3]:
+                    if ax != 0 or ay != 0:
+                        draw.text((center_x + ax, center_y + ay), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
+            draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
+        else:
+            # FALLBACK ENGINE: Programmatically scales bitmap text up if no TrueType fonts load
+            default_font = ImageFont.load_default()
             
-        # Clear thick text outline border for high contrast readability
-        for ax in [-3, -2, -1, 0, 1, 2, 3]:
-            for ay in [-3, -2, -1, 0, 1, 2, 3]:
-                if ax != 0 or ay != 0:
-                    draw.text((center_x + ax, center_y + ay), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
-                    
-        # Sharp foreground metric color layer
-        draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
+            # 1. Get size of the text at standard tiny size 
+            # (Works seamlessly on older Pillow installations lacking font.getbbox)
+            try:
+                tw, th = draw.textsize(display_text, font=default_font)
+            except AttributeError:
+                bbox = draw.textbbox((0, 0), display_text, font=default_font)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                
+            # Avoid divide-by-zero errors
+            tw = max(1, tw)
+            th = max(1, th)
+            
+            # 2. Render text onto an isolated micro canvas
+            pad = 4
+            text_canvas = Image.new("RGBA", (tw + pad * 2, th + pad * 2), (0, 0, 0, 0))
+            canvas_draw = ImageDraw.Draw(text_canvas)
+            
+            # Draw black structural border text strokes onto micro canvas
+            for ax in [-1, 0, 1]:
+                for ay in [-1, 0, 1]:
+                    canvas_draw.text((pad + ax, pad + ay), display_text, fill=(0, 0, 0, 255), font=default_font)
+            canvas_draw.text((pad, pad), display_text, fill=text_color, font=default_font)
+            
+            # 3. Calculate target scaling factor based on display window configuration
+            target_w = font_size * (tw / 10.0)
+            target_h = font_size * (th / 10.0)
+            
+            # Scale micro canvas to final visual design size
+            scaled_text = text_canvas.resize((int(target_w), int(target_h)), Image.Resampling.NEAREST)
+            
+            # 4. Composite scaled bitmap text layer directly over center display coordinates
+            past_x = int(center_x - (target_w / 2.0))
+            past_y = int(center_y - (target_h / 2.0))
+            overlay.paste(scaled_text, (past_x, past_y), scaled_text)
+        # ------------------------------------------------------
                 
         return Image.alpha_composite(base_img, overlay)
     except Exception:
