@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import time
 import os
+import math
 from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
@@ -29,6 +30,49 @@ def draw_digital_display(value, image_filename, is_frequency=False):
             display_text = f"{value} Hz"
             font_size = int(png_img.size[1] * 0.095) 
             text_color = (0, 35, 102, 255)  # Royal Blue
+            
+            # --- DYNAMIC POINTER NEEDLE ENGINE FOR HZ ONLY ---
+            try:
+                val_float = float(value)
+                # Keep within safe physical dial limits (45 to 55 Hz)
+                val_float = max(45.0, min(55.0, val_float))
+                
+                # 50 Hz is straight up (90°). Total dial span is 240° over 10 units
+                theta = (val_float - 50.0) * 24.0
+                alpha = math.radians(90.0 - theta)
+                
+                w_img, h_img = png_img.size
+                cx, cy = w_img / 2.0, h_img / 2.0
+                radius = w_img / 2.0
+                
+                # Needle dimensions proportional to gauge face layout
+                cap_radius = radius * 0.15
+                pointer_length = radius * 0.75
+                base_width = radius * 0.025
+                
+                # Tip coordinates of the needle
+                tx = cx + pointer_length * math.cos(alpha)
+                ty = cy - pointer_length * math.sin(alpha)
+                
+                # Base perpendicular alignment vectors
+                perp_alpha1 = alpha + math.pi / 2.0
+                perp_alpha2 = alpha - math.pi / 2.0
+                
+                bx1 = cx + cap_radius * math.cos(alpha) + base_width * math.cos(perp_alpha1)
+                by1 = cy - cap_radius * math.sin(alpha) - base_width * math.sin(perp_alpha1)
+                
+                bx2 = cx + cap_radius * math.cos(alpha) + base_width * math.cos(perp_alpha2)
+                by2 = cy - cap_radius * math.sin(alpha) - base_width * math.sin(perp_alpha2)
+                
+                # Draw vibrant high-contrast red needle body
+                draw.polygon([(bx1, by1), (tx, ty), (bx2, by2)], fill=(255, 50, 50, 255))
+                # Render crisp high-definition black borders for maximum clarity
+                draw.line([(bx1, by1), (tx, ty)], fill=(0, 0, 0, 255), width=2)
+                draw.line([(tx, ty), (bx2, by2)], fill=(0, 0, 0, 255), width=2)
+                draw.line([(bx2, by2), (bx1, by1)], fill=(0, 0, 0, 255), width=2)
+            except Exception:
+                pass
+            # --------------------------------------------------
         else:
             display_text = f"{value} MW"
             font_size = int(png_img.size[1] * 0.085) 
