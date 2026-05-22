@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import time
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
@@ -9,6 +9,79 @@ st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
+
+def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
+    """
+    Renders clean, bold geometric digital values directly onto the pixel canvas
+    to remain 100% immune to system font errors.
+    """
+    t = thickness
+    mid_y = h / 2
+    
+    # 7-Segment coordinate maps: (rel_x, rel_y, width, height)
+    segments = {
+        'a': (t, 0, w - 2*t, t),              # Top
+        'b': (w - t, t, t, mid_y - t),         # Top Right
+        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
+        'd': (t, h - t, w - 2*t, t),           # Bottom
+        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
+        'f': (0, t, t, mid_y - t),             # Top Left
+        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
+    }
+    
+    mapping = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
+        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
+        '-': 'g'
+    }
+    
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - t, x + w/2 + t, y + h], fill=color)
+        return
+
+    active = mapping.get(char, '')
+    for seg in active:
+        sx, sy, sw, sh = segments[seg]
+        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+
+def draw_vector_string(draw, text, cx, cy, color):
+    """Aligns and scales custom text blocks perfectly inside the gauge window."""
+    digit_w = 26
+    digit_h = 46
+    thickness = 6
+    spacing = 6
+    
+    total_w = len(text) * (digit_w + spacing) - spacing
+    start_x = cx - (total_w / 2)
+    start_y = cy - (digit_h / 2)
+    
+    curr_x = start_x
+    for char in text:
+        if char in '0123456789.-':
+            # Render sharp, crisp numeric value
+            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
+        else:
+            # Custom high-visibility alphanumeric letters for MW and Hz
+            if char == 'M':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y, curr_x + digit_w, start_y + 6], fill=color)
+                draw.rectangle([curr_x + digit_w/2 - 3, start_y, curr_x + digit_w/2 + 3, start_y + digit_h], fill=color)
+            elif char == 'W':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h - 6, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w/2 - 3, start_y + 15, curr_x + digit_w/2 + 3, start_y + digit_h], fill=color)
+            elif char == 'H':
+                draw.rectangle([curr_x, start_y, curr_x + 6, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x + digit_w - 6, start_y, curr_x + digit_w, start_y + digit_h], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h/2 - 3, curr_x + digit_w, start_y + digit_h/2 + 3], fill=color)
+            elif char == 'z':
+                draw.rectangle([curr_x, start_y + 12, curr_x + digit_w, start_y + 18], fill=color)
+                draw.rectangle([curr_x, start_y + digit_h - 6, curr_x + digit_w, start_y + digit_h], fill=color)
+                # Diagonal segment replacement block
+                draw.rectangle([curr_x + 6, start_y + 18, curr_x + digit_w - 6, start_y + digit_h - 6], fill=color)
+        curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, is_frequency=False):
     try:
@@ -20,37 +93,19 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
-        # Centering positions for the black display cutout boxes
-        center_x = png_img.size[0] * 0.49
+        # Absolute pixel alignment markers for the display screens
+        center_x = png_img.size[0] * 0.485
         center_y = png_img.size[1] * 0.835
         
-        # Apply high-contrast text configurations
         if is_frequency:
             display_text = f"{value} Hz"
-            text_color = (255, 235, 0, 255)  # Vibrant Yellow text
-            font_size = 85                    # Large readable font size
+            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
         else:
             display_text = f"{value} MW"
-            text_color = (0, 240, 255, 255) # Electric Cyan text
-            font_size = 90                    # Extra large readable font size
+            text_color = (0, 240, 255, 255) # Electric Cyan
             
-        # Load the default Linux server vector bold font structure
-        try:
-            font = ImageFont.truetype("LiberationSans-Bold.ttf", font_size)
-        except IOError:
-            try:
-                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
-            except IOError:
-                font = ImageFont.load_default()
-        
-        # Heavy multi-layered silhouette border to separate text from background
-        for ox in [-3, -2, -1, 0, 1, 2, 3]:
-            for oy in [-3, -2, -1, 0, 1, 2, 3]:
-                if ox != 0 or oy != 0:
-                    draw.text((center_x + ox, center_y + oy), display_text, fill=(0, 0, 0, 255), font=font, anchor="mm")
-                    
-        # Crisp foreground indicator value layer placement
-        draw.text((center_x, center_y), display_text, fill=text_color, font=font, anchor="mm")
+        # Draw custom vector text layout directly into place
+        draw_vector_string(draw, display_text, center_x, center_y, text_color)
                 
         return Image.alpha_composite(base_img, overlay)
     except Exception:
@@ -58,7 +113,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent display layout blocks to stop page flickers
+# Persistent layout infrastructure frame configuration
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -78,34 +133,33 @@ try:
     response = requests.get(url)
     if response.status_code == 200 and (nctps_data := response.json()):
         
-        # Explicit data parsing values
         u1_val = nctps_data.get("UNIT1", {}).get("MW", "N/A")
         u2_val = nctps_data.get("UNIT2", {}).get("MW", "N/A")
         u3_val = nctps_data.get("UNIT3", {}).get("MW", "N/A")
         hz_val = nctps_data.get("HZ", {}).get("HZ", "N/A")
         
-        # Render Column 1
+        # Column 1 Engine Execution
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
             img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
             if img1:
                 i1.image(img1, use_container_width=True)
                 
-        # Render Column 2
+        # Column 2 Engine Execution
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
             img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
             if img2:
                 i2.image(img2, use_container_width=True)
                 
-        # Render Column 3
+        # Column 3 Engine Execution
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
         if u3_val != "N/A":
             img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
             if img3:
                 i3.image(img3, use_container_width=True)
                 
-        # Render Column 4
+        # Column 4 Engine Execution
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         if hz_val != "N/A":
             img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
