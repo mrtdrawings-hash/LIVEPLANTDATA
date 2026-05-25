@@ -10,6 +10,9 @@ st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
+# ------------------------------------------------------------------
+# CACHED IMAGES - ELIMINATES FILESYSTEM LAG & FLICKERING
+# ------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
     paths_to_check = [
@@ -27,7 +30,7 @@ def load_base_image(image_filename):
     return solid_bg.convert("RGBA")
 
 # ------------------------------------------------------------------
-# OLD VECTOR DIGIT ENGINE - RESTORED AND RESCALED LARGER
+# ORIGINAL VECTOR DIGIT ENGINE - RESTORED AND RESCALED LARGER
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
@@ -95,13 +98,14 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Static layout stays outside the refresh fragment
+# Permanent outer layout columns
 col1, col2, col3, col4 = st.columns(4)
 slot1 = col1.empty()
 slot2 = col2.empty()
 slot3 = col3.empty()
 slot4 = col4.empty()
 
+# Dynamically binding refresh loop directly to slider state adjustments
 @st.fragment(run_every=refresh_interval if auto_refresh else None)
 def live_panel():
     try:
@@ -134,9 +138,8 @@ def live_panel():
                 img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
                 if img4:
                     slot4.image(img4, use_container_width=True)
-
         else:
-            st.error(f"Server returned status code {response.status_code}")
+            st.error(f"Server Error Status Code: {response.status_code}")
 
     except Exception as e:
         st.error(f"Live Telemetry Link Error: {e}")
