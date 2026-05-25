@@ -30,7 +30,7 @@ def load_base_image(image_filename):
     return solid_bg.convert("RGBA")
 
 # ------------------------------------------------------------------
-# ORIGINAL VECTOR DIGIT ENGINE - RESTORED AND RESCALED LARGER
+# MULTI-STYLE VECTOR ENGINE (ELEGANT FOR MW / BOLD FOR HZ)
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
@@ -61,11 +61,20 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
         sx, sy, sw, sh = segments[seg]
         draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
 
-def draw_vector_string(draw, text, cx, cy, color):
-    digit_w = 80
-    digit_h = 138
-    thickness = 18
-    spacing = 14
+def draw_vector_string(draw, text, cx, cy, color, is_frequency):
+    # DYNAMIC CONFIGURATION ACCORDING TO INSTRUMENT TYPE
+    if is_frequency:
+        # Kept exactly the same as your original layout configuration
+        digit_w = 80
+        digit_h = 138
+        thickness = 18
+        spacing = 14
+    else:
+        # High-elegance styling configuration: Taller, slimmer, sleeker line profile
+        digit_w = 66
+        digit_h = 142
+        thickness = 10
+        spacing = 16
 
     total_w = len(text) * (digit_w + spacing) - spacing
     start_x = cx - (total_w / 2)
@@ -91,14 +100,14 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 
         text_color = (255, 235, 0, 255) if (is_frequency or "HZ" in image_filename.upper()) else (0, 240, 255, 255)
 
-        draw_vector_string(draw, str(value), center_x, center_y, text_color)
+        draw_vector_string(draw, str(value), center_x, center_y, text_color, is_frequency)
         return Image.alpha_composite(base_img, overlay)
     except Exception:
         return None
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent outer layout columns
+# Permanent outer layout columns to prevent layout jumps
 col1, col2, col3, col4 = st.columns(4)
 slot1 = col1.empty()
 slot2 = col2.empty()
