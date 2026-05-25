@@ -100,7 +100,7 @@ css_styles = """
 /* Digital LED Panel Character Looks */
 .digital-text {
     font-family: 'Courier New', Courier, monospace;
-    font-weight: 450;
+    font-weight: 300;
     font-size: clamp(2.5rem, 6vw, 4.2rem); /* Scalable font based on column widths */
     letter-spacing: 2px;
     text-shadow: 0px 0px 12px rgba(0,0,0,0.8);
