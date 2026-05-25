@@ -97,14 +97,13 @@ css_styles = """
     pointer-events: none;
 }
 
-/* Digital LED Panel Character Looks (FONT SIZE REDUCED HERE) */
+/* Digital LED Panel Character Looks */
 .digital-text {
     font-family: 'Courier New', Courier, monospace;
-    font-weight: 900;
-    font-size: clamp(1.8rem, 4.5vw, 2.8rem); /* Reduced size to prevent visual boundary spilling */
-    letter-spacing: 1px;
-    text-shadow: 0px 0px 10px rgba(0,0,0,0.9);
-    margin-top: 5px; /* Slight offset down to align cleanly inside meter screens */
+    font-weight: 450;
+    font-size: clamp(2.5rem, 6vw, 4.2rem); /* Scalable font based on column widths */
+    letter-spacing: 2px;
+    text-shadow: 0px 0px 12px rgba(0,0,0,0.8);
     user-select: none;
 }
 
@@ -141,4 +140,55 @@ def display_flicker_free_card(value, bg_key, is_frequency=False):
 # ------------------------------------------------------------------
 # MAIN TELEMETRY LOOP
 # ------------------------------------------------------------------
-url
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    m1 = st.empty()
+    i1 = st.empty()
+with col2:
+    m2 = st.empty()
+    i2 = st.empty()
+with col3:
+    m3 = st.empty()
+    i3 = st.empty()
+with col4:
+    m4 = st.empty()
+    i4 = st.empty()
+
+try:
+    response = requests.get(url, timeout=4)
+    if response.status_code == 200 and (nctps_data := response.json()):
+        
+        u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+        u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+        u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+        hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+        
+        # UNIT 1 DISPLAY FRAME
+        m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
+        card1 = display_flicker_free_card(u1_val, "u1", is_frequency=False)
+        i1.markdown(card1, unsafe_allow_html=True)
+
+        # UNIT 2 DISPLAY FRAME
+        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
+        card2 = display_flicker_free_card(u2_val, "u2", is_frequency=False)
+        i2.markdown(card2, unsafe_allow_html=True)
+
+        # UNIT 3 DISPLAY FRAME
+        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        card3 = display_flicker_free_card(u3_val, "u3", is_frequency=False)
+        i3.markdown(card3, unsafe_allow_html=True)
+
+        # GRID FREQUENCY DISPLAY FRAME
+        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        card4 = display_flicker_free_card(hz_val, "hz", is_frequency=True)
+        i4.markdown(card4, unsafe_allow_html=True)
+
+except Exception as e:
+    st.error(f"Live Telemetry Timeout/Connection Error: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()
