@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import time
 import base64
+import os
 from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
@@ -12,15 +13,42 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# GITHUB RAW ASSET LINK PRODUCTION
+# BULLETPROOF CLOUD LOCAL ENCODER (Bypasses GitHub URL Handshakes)
 # ------------------------------------------------------------------
-GITHUB_USER = "mrtdrawings-hash"  
-GITHUB_REPO = "LIVEPLANTDATA"        
-GITHUB_BRANCH = "main"
+@st.cache_resource
+def get_cached_base64_background(filename):
+    """
+    Reads the file directly from the cloned repository instance on the cloud server,
+    converts it to a Base64 text string, and keeps it permanently in server memory.
+    """
+    # Check current directory and script directory
+    paths_to_check = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), filename),
+        os.path.join(os.getcwd(), filename),
+        filename
+    ]
+    
+    target_path = None
+    for p in paths_to_check:
+        if os.path.exists(p):
+            target_path = p
+            break
 
-def get_github_raw_url(filename):
-    """Maps the direct raw URL link to pull image assets directly from GitHub."""
-    return f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{filename}"
+    try:
+        if target_path:
+            with open(target_path, "rb") as img_file:
+                encoded_string = base64.b64encode(img_file.read()).decode()
+            return f"data:image/jpeg;base64,{encoded_string}"
+    except Exception:
+        pass
+
+    # If the file is completely missing or unreadable, generate a stable virtual dark panel background
+    fallback = Image.new("RGBA", (400, 250), (20, 25, 35, 255))
+    import io
+    buf = io.BytesIO()
+    fallback.convert("RGB").save(buf, format="JPEG")
+    fallback_b64 = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/jpeg;base64,{fallback_b64}"
 
 # ------------------------------------------------------------------
 # ORIGINAL SEVEN-SEGMENT VECTOR LOGIC
@@ -75,33 +103,33 @@ def draw_vector_string(draw, text, cx, cy, color):
 # ------------------------------------------------------------------
 def render_live_instrument_card(value, filename, is_frequency=False):
     """
-    Renders text numbers to a transparent layer and displays it over 
-    the cached background image using standard CSS layout overlays.
+    Combines the cached server-side base64 background string with a 
+    dynamically calculated transparent text string to achieve instant browser loads.
     """
-    # Fetch background direct raw link from your GitHub Repository
-    img_url = get_github_raw_url(filename)
+    # Fetch permanent background data URI instantly from cache memory
+    bg_b64_uri = get_cached_base64_background(filename)
     
     if is_frequency:
         text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
     else:
         text_color = (0, 240, 255, 255)  # Electric Cyan
         
-    # Generate dynamic, clear transparent layer containing only your vector string values
+    # Generate dynamic transparent overlay containing your vector string digits
     overlay = Image.new("RGBA", (400, 250), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     draw_vector_string(draw, str(value), 200, 125, text_color)
     
-    # Save transient layer text matrix directly to Base64 text string
+    # Save transient layer text matrix directly to a Base64 text string data URI
     import io
     txt_buffer = io.BytesIO()
     overlay.save(txt_buffer, format="PNG")
     txt_b64 = base64.b64encode(txt_buffer.getvalue()).decode()
     txt_uri = f"data:image/png;base64,{txt_b64}"
     
-    # Nested HTML block that lets the browser cache the base dial image natively via URL
+    # Nested completely local HTML layout block - ensures zero cloud-network refresh delays
     html_layout = f"""
     <div style="position: relative; width: 100%; display: inline-block;">
-        <img src="{img_url}" style="width: 100%; height: auto; display: block; border-radius: 4px;">
+        <img src="{bg_b64_uri}" style="width: 100%; height: auto; display: block; border-radius: 4px;">
         <img src="{txt_uri}" style="position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; mix-blend-mode: screen;">
     </div>
     """
