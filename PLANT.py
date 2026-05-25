@@ -1,8 +1,6 @@
 import streamlit as st
 import requests
 import time
-import io
-import base64
 import os
 from PIL import Image, ImageDraw
 
@@ -14,7 +12,7 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# ORIGINAL SEVEN-SEGMENT VECTOR LOGIC (Preserved Exactly)
+# ORIGINAL VECTOR DIGIT LOGIC (Preserved Exactly)
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
@@ -62,6 +60,7 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, is_frequency=False):
+    # Verify local file paths dynamically
     paths_to_check = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -100,39 +99,21 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         return None
 
 # ------------------------------------------------------------------
-# HIGH-SPEED FLICKERLESS BASE64 CONVERTER
-# ------------------------------------------------------------------
-def PIL_to_html_img(pil_img):
-    """Converts PIL images to inline data URIs to kill stale ghost elements."""
-    if pil_img is None:
-        return '<div style="width:100%; max-width:400px; aspect-ratio:400/250; background:#111; border-radius:6px; margin:0 auto;"></div>'
-    
-    buffered = io.BytesIO()
-    pil_img.save(buffered, format="PNG")
-    b64_str = base64.b64encode(buffered.getvalue()).decode()
-    
-    return f"""
-    <img src="data:image/png;base64,{b64_str}" 
-         style="width: 100%; max-width: 400px; display: block; margin: 0 auto; 
-                border-radius: 6px; box-shadow: 0px 4px 10px rgba(0,0,0,0.5);">
-    """
-
-# ------------------------------------------------------------------
-# MAIN LAYOUT GRID SETUP WITH STATIC DOM KEYS
+# LAYOUT FRAME SETUP (Fixed: Key Removed)
 # ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-col1, col2, col3, col4 = st.columns(4, key="plant_grid_system")
+col1, col2, col3, col4 = st.columns(4)
 
-# Form unique static container tracking points
+# Create persistent single-element slots to prevent flickering/duplication
 with col1:
-    i1 = st.empty(key="panel_u1")
+    i1 = st.empty()
 with col2:
-    i2 = st.empty(key="panel_u2")
+    i2 = st.empty()
 with col3:
-    i3 = st.empty(key="panel_u3")
+    i3 = st.empty()
 with col4:
-    i4 = st.empty(key="panel_hz")
+    i4 = st.empty()
 
 try:
     response = requests.get(url, timeout=4)
@@ -143,22 +124,31 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # Draw and insert dynamically via instant HTML injection blocks
-        img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-        i1.markdown(PIL_to_html_img(img1), unsafe_allow_html=True)
+        # Render and display directly inside the established placeholders
+        if u1_val != "N/A":
+            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
+            if img1:
+                i1.image(img1, use_container_width=True)
 
-        img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-        i2.markdown(PIL_to_html_img(img2), unsafe_allow_html=True)
+        if u2_val != "N/A":
+            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+            if img2:
+                i2.image(img2, use_container_width=True)
 
-        img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-        i3.markdown(PIL_to_html_img(img3), unsafe_allow_html=True)
+        if u3_val != "N/A":
+            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+            if img3:
+                i3.image(img3, use_container_width=True)
 
-        img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-        i4.markdown(PIL_to_html_img(img4), unsafe_allow_html=True)
+        if hz_val != "N/A":
+            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+            if img4:
+                i4.image(img4, use_container_width=True)
 
 except Exception as e:
     st.error(f"Live Telemetry Link Error: {e}")
 
+# High-frequency dashboard auto-refresh loop
 if auto_refresh:
     time.sleep(refresh_interval)
     st.rerun()
