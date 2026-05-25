@@ -1,41 +1,10 @@
 import streamlit as st
 import requests
 import time
-import base64
 import os
+from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-
-# Inject Custom CSS for stable, non-flashing image containers with absolute text overlays
-st.markdown("""
-<style>
-    .card-container {
-        position: relative;
-        width: 100%;
-        display: inline-block;
-    }
-    .card-image {
-        width: 100%;
-        height: auto;
-        display: block;
-        border-radius: 4px;
-    }
-    .overlay-text {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: 'Courier New', Courier, monospace;
-        font-weight: bold;
-        font-size: 3.5vw; /* Scales dynamically with screen width */
-        white-space: nowrap;
-        text-shadow: 3px 3px 5px rgba(0,0,0,1); /* Deep shadow for heavy readability */
-    }
-    .color-cyan { color: #00f0ff; }
-    .color-yellow { color: #ffeb00; }
-</style>
-""", unsafe_style_with_html=True)
-
 st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
@@ -43,25 +12,123 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# BASE64 IMAGE ENCODER (Eliminates broken browser paths completely)
+# SYSTEM PATH RESOLVER (Fixes FileNotFoundError)
+# ------------------------------------------------------------------
+# This finds the exact absolute folder where PLANT.py resides
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def get_absolute_path(filename):
+    """Combines script directory with filename to guarantee absolute paths."""
+    return os.path.join(SCRIPT_DIR, filename)
+
+# ------------------------------------------------------------------
+# CACHING LAYER: Loads background assets safely only ONCE
 # ------------------------------------------------------------------
 @st.cache_resource
-def get_base64_image(image_path):
-    """Loads a local image file and converts it into a Base64 string for direct HTML injection."""
+def load_base_template(filename):
+    """
+    Finds, opens, and retains background assets in system RAM.
+    This permanently eliminates disk I/O lag and image vanishing.
+    """
+    abs_path = get_absolute_path(filename)
     try:
-        if os.path.exists(image_path):
-            with open(image_path, "rb") as img_file:
-                encoded = base64.b64encode(img_file.read()).decode()
-            return f"data:image/jpeg;base64,{encoded}"
+        if os.path.exists(abs_path):
+            png_img = Image.open(abs_path).convert("RGBA")
+            solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+            solid_bg.paste(png_img, (0, 0), png_img)
+            return solid_bg.convert("RGBA")
         else:
-            # Fallback if image file is entirely missing from the directory
-            return "https://via.placeholder.com/400x300?text=File+Not+Found"
+            return None
+    except Exception as e:
+        return None
+
+# ------------------------------------------------------------------
+# ORIGINAL VECTOR DIGIT CODES
+# ------------------------------------------------------------------
+def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
+    t = thickness
+    mid_y = h / 2
+    
+    segments = {
+        'a': (t, 0, w - 2*t, t),               # Top
+        'b': (w - t, t, t, mid_y - t),         # Top Right
+        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
+        'd': (t, h - t, w - 2*t, t),           # Bottom
+        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
+        'f': (0, t, t, mid_y - t),             # Top Left
+        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
+    }
+    
+    mapping = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
+        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
+        '-': 'g'
+    }
+    
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        return
+
+    active = mapping.get(char, '')
+    for seg in active:
+        sx, sy, sw, sh = segments[seg]
+        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+
+def draw_vector_string(draw, text, cx, cy, color):
+    digit_w = 64       
+    digit_h = 110       
+    thickness = 15      
+    spacing = 12       
+    
+    total_w = len(text) * (digit_w + spacing) - spacing
+    start_x = cx - (total_w / 2)
+    start_y = cy - (digit_h / 2)
+    
+    curr_x = start_x
+    for char in text:
+        if char in '0123456789.-':
+            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
+        curr_x += digit_w + spacing
+
+def draw_digital_display(value, image_filename, **kwargs):
+    # Fetch background safely via our path-resolved cache layer
+    base_img = load_base_template(image_filename)
+    
+    # Fallback placeholder frame if an image asset is completely missing
+    if base_img is None:
+        fallback = Image.new("RGBA", (400, 300), (30, 30, 30, 255))
+        draw = ImageDraw.Draw(fallback)
+        draw.text((10, 10), f"Missing: {image_filename}", fill=(255,0,0,255))
+        base_img = fallback
+        
+    try:
+        # Generate text overlay layer
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        
+        center_x = base_img.size[0] * 0.50
+        center_y = base_img.size[1] * 0.50
+        
+        display_text = f"{value}"
+        is_frequency = kwargs.get('is_frequency', False)
+        
+        if "HZ" in image_filename.upper() or "HZ" in value:
+            is_frequency = True
+            
+        if is_frequency:
+            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
+        else:
+            text_color = (0, 240, 255, 255)  # Electric Cyan
+            
+        draw_vector_string(draw, display_text, center_x, center_y, text_color)
+                
+        return Image.alpha_composite(base_img, overlay)
     except Exception:
-        return "https://via.placeholder.com/400x300?text=Error+Loading"
+        return None
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Establish persistent grid columns
+# Permanent display layout configuration
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -86,55 +153,7 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # --- Pre-convert local images to Base64 (cached instantly) ---
-        img1_b64 = get_base64_image("Gemini_U1.jpg")
-        img2_b64 = get_base64_image("Gemini_U2.jpg")
-        img3_b64 = get_base64_image("Gemini_U3.jpg")
-        hz_b64 = get_base64_image("HZ.jpg")
-        
-        # --- UNIT 1 ---
+        # UNIT 1
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            i1.markdown(f"""
-            <div class="card-container">
-                <img src="{img1_b64}" class="card-image">
-                <div class="overlay-text color-cyan">{u1_val}</div>
-            </div>
-            """, unsafe_style_with_html=True)
-
-        # --- UNIT 2 ---
-        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
-        if u2_val != "N/A":
-            i2.markdown(f"""
-            <div class="card-container">
-                <img src="{img2_b64}" class="card-image">
-                <div class="overlay-text color-cyan">{u2_val}</div>
-            </div>
-            """, unsafe_style_with_html=True)
-
-        # --- UNIT 3 ---
-        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
-        if u3_val != "N/A":
-            i3.markdown(f"""
-            <div class="card-container">
-                <img src="{img3_b64}" class="card-image">
-                <div class="overlay-text color-cyan">{u3_val}</div>
-            </div>
-            """, unsafe_style_with_html=True)
-
-        # --- GRID FREQUENCY ---
-        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
-        if hz_val != "N/A":
-            i4.markdown(f"""
-            <div class="card-container">
-                <img src="{hz_b64}" class="card-image">
-                <div class="overlay-text color-yellow">{hz_val}</div>
-            </div>
-            """, unsafe_style_with_html=True)
-
-except Exception as e:
-    st.error(f"Connection Error: {e}")
-
-if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is
