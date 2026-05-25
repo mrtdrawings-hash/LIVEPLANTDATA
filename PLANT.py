@@ -4,7 +4,7 @@ import os
 from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
+st.title("⚡ NORTH CHENNAI THERMAL POWER STATION 1 LIVE MW ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
@@ -27,21 +27,16 @@ def load_base_image(image_filename):
     return solid_bg.convert("RGBA")
 
 # ------------------------------------------------------------------
-# ORIGINAL VECTOR DIGIT ENGINE - STABLE & RESTORED
+# PREMIUM INDUSTRIAL GEOMETRIC SEGMENT ENGINE (CHAMFERED STYLE)
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
     mid_y = h / 2
 
-    segments = {
-        'a': (t, 0, w - 2*t, t),
-        'b': (w - t, t, t, mid_y - t),
-        'c': (w - t, mid_y, t, mid_y - t),
-        'd': (t, h - t, w - 2*t, t),
-        'e': (0, mid_y, t, mid_y - t),
-        'f': (0, t, t, mid_y - t),
-        'g': (t, mid_y - t/2, w - 2*t, t)
-    }
+    # Redefining standard blocks into sleek polygons with 45-degree cut joints
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        return
 
     mapping = {
         '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
@@ -49,16 +44,60 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
         '-': 'g'
     }
 
-    if char == '.':
-        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
-        return
-
     active = mapping.get(char, '')
-    for seg in active:
-        sx, sy, sw, sh = segments[seg]
-        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+    
+    # Top Segment (a) - Chamfered Ends
+    if 'a' in active:
+        draw.polygon([
+            (x + t, y), (x + w - t, y), 
+            (x + w - 1.5*t, y + t), (x + 1.5*t, y + t)
+        ], fill=color)
+        
+    # Top Left Segment (f)
+    if 'f' in active:
+        draw.polygon([
+            (x, y + t), (x + t, y + 1.5*t), 
+            (x + t, y + mid_y - t/2), (x, y + mid_y)
+        ], fill=color)
+        
+    # Top Right Segment (b)
+    if 'b' in active:
+        draw.polygon([
+            (x + w - t, y + 1.5*t), (x + w, y + t), 
+            (x + w, y + mid_y), (x + w - t, y + mid_y - t/2)
+        ], fill=color)
+        
+    # Middle Segment (g) - Pointed Ends
+    if 'g' in active:
+        draw.polygon([
+            (x + 1.2*t, y + mid_y), (x + 2*t, y + mid_y - t/2), 
+            (x + w - 2*t, y + mid_y - t/2), (x + w - 1.2*t, y + mid_y),
+            (x + w - 2*t, y + mid_y + t/2), (x + 2*t, y + mid_y + t/2)
+        ], fill=color)
+        
+    # Bottom Left Segment (e)
+    if 'e' in active:
+        draw.polygon([
+            (x, y + mid_y), (x + t, y + mid_y + t/2), 
+            (x + t, y + h - 1.5*t), (x, y + h - t)
+        ], fill=color)
+        
+    # Bottom Right Segment (c)
+    if 'c' in active:
+        draw.polygon([
+            (x + w - t, y + mid_y + t/2), (x + w, y + mid_y), 
+            (x + w, y + h - t), (x + w - t, y + h - 1.5*t)
+        ], fill=color)
+        
+    # Bottom Segment (d) - Chamfered Ends
+    if 'd' in active:
+        draw.polygon([
+            (x + 1.5*t, y + h - t), (x + w - 1.5*t, y + h - t), 
+            (x + w - t, y + h), (x + t, y + h)
+        ], fill=color)
 
 def draw_vector_string(draw, text, cx, cy, color):
+    # PRESERVED YOUR EXACT CHOSEN LARGE SIZES
     digit_w = 80
     digit_h = 138
     thickness = 18
@@ -95,7 +134,7 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Static layout elements outside of the auto-refresh zone
+# Static layout system stays out of the fragment refresh
 col1, col2, col3, col4 = st.columns(4)
 slot1 = col1.empty()
 slot2 = col2.empty()
@@ -134,7 +173,6 @@ def live_panel():
                 img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
                 if img4:
                     slot4.image(img4, use_container_width=True)
-
         else:
             st.error(f"Server returned status code {response.status_code}")
 
