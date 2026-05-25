@@ -1,121 +1,47 @@
 import streamlit as st
 import requests
 import time
-from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
+
+# Inject Custom CSS to create stable, non-flashing image containers with absolute text overlays
+st.markdown("""
+<style>
+    .card-container {
+        position: relative;
+        width: 100%;
+        display: inline-block;
+    }
+    .card-image {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    .overlay-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+        font-size: 4vw; /* Scales dynamically with screen width */
+        white-space: nowrap;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    }
+    .color-cyan { color: #00f0ff; }
+    .color-yellow { color: #ffeb00; }
+</style>
+""", unsafe_style_with_html=True)
+
 st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
-# ------------------------------------------------------------------
-# CACHING LAYER: Loads and pre-processes background assets only ONCE
-# ------------------------------------------------------------------
-@st.cache_resource
-def load_and_prepare_base_image(image_filename):
-    """
-    Opens and creates a permanent, solid RGBA base template in memory.
-    This eliminates disk I/O and format conversion lag on every refresh.
-    """
-    try:
-        png_img = Image.open(image_filename).convert("RGBA")
-        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-        solid_bg.paste(png_img, (0, 0), png_img)
-        return solid_bg.convert("RGBA")
-    except Exception as e:
-        st.sidebar.error(f"Failed to load background template {image_filename}: {e}")
-        return None
-
-def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
-    """
-    Renders thick, bold 7-segment style numbers directly onto pixel coordinates.
-    Bypasses all server font system dependencies permanently.
-    """
-    t = thickness
-    mid_y = h / 2
-    
-    # 7-Segment coordinate line maps: (rel_x, rel_y, width, height)
-    segments = {
-        'a': (t, 0, w - 2*t, t),               # Top
-        'b': (w - t, t, t, mid_y - t),         # Top Right
-        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
-        'd': (t, h - t, w - 2*t, t),           # Bottom
-        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
-        'f': (0, t, t, mid_y - t),             # Top Left
-        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
-    }
-    
-    mapping = {
-        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
-        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
-        '-': 'g'
-    }
-    
-    if char == '.':
-        # Enhanced thick decimal point block
-        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
-        return
-
-    active = mapping.get(char, '')
-    for seg in active:
-        sx, sy, sw, sh = segments[seg]
-        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
-
-def draw_vector_string(draw, text, cx, cy, color):
-    """Aligns and scales massive digital strings precisely into the geometric center."""
-    digit_w = 64       
-    digit_h = 110       
-    thickness = 15      
-    spacing = 12       
-    
-    total_w = len(text) * (digit_w + spacing) - spacing
-    start_x = cx - (total_w / 2)
-    start_y = cy - (digit_h / 2)
-    
-    curr_x = start_x
-    for char in text:
-        if char in '0123456789.-':
-            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
-        curr_x += digit_w + spacing
-
-def draw_digital_display(value, image_filename, **kwargs):
-    # Fetch the pre-compiled clean base image directly from the cache
-    base_img = load_and_prepare_base_image(image_filename)
-    if base_img is None:
-        return None
-        
-    try:
-        # Create a completely fresh, transparent dynamic text layer
-        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        
-        # Centering layout coordinates at the exact middle of the images
-        center_x = base_img.size[0] * 0.50
-        center_y = base_img.size[1] * 0.50
-        
-        display_text = f"{value}"
-        is_frequency = kwargs.get('is_frequency', False)
-        
-        if "HZ" in image_filename.upper() or "HZ" in value:
-            is_frequency = True
-            
-        if is_frequency:
-            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-        else:
-            text_color = (0, 240, 255, 255)  # Electric Cyan
-            
-        draw_vector_string(draw, display_text, center_x, center_y, text_color)
-                
-        # Composite the transient vector text directly over a copy of the cached frame
-        return Image.alpha_composite(base_img, overlay)
-    except Exception:
-        return None
-
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent display components frame setup (Eliminates flashing updates)
+# Establish persistent grid columns
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -140,33 +66,45 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # UNIT 1
+        # --- UNIT 1 ---
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True, clamp=True)
+            i1.markdown(f"""
+            <div class="card-container">
+                <img src="app/static/Gemini_U1.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U1+Background';">
+                <div class="overlay-text color-cyan">{u1_val}</div>
+            </div>
+            """, unsafe_style_with_html=True)
 
-        # UNIT 2
+        # --- UNIT 2 ---
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True, clamp=True)
+            i2.markdown(f"""
+            <div class="card-container">
+                <img src="app/static/Gemini_U2.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U2+Background';">
+                <div class="overlay-text color-cyan">{u2_val}</div>
+            </div>
+            """, unsafe_style_with_html=True)
 
-        # UNIT 3
+        # --- UNIT 3 ---
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
         if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True, clamp=True)
+            i3.markdown(f"""
+            <div class="card-container">
+                <img src="app/static/Gemini_U3.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U3+Background';">
+                <div class="overlay-text color-cyan">{u3_val}</div>
+            </div>
+            """, unsafe_style_with_html=True)
 
-        # GRID FREQUENCY
+        # --- GRID FREQUENCY ---
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True, clamp=True)
+            i4.markdown(f"""
+            <div class="card-container">
+                <img src="app/static/HZ.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=HZ+Background';">
+                <div class="overlay-text color-yellow">{hz_val}</div>
+            </div>
+            """, unsafe_style_with_html=True)
 
 except Exception as e:
     st.error(f"Connection Error: {e}")
