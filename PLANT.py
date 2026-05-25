@@ -1,10 +1,12 @@
 import streamlit as st
 import requests
 import time
+import base64
+import os
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 
-# Inject Custom CSS to create stable, non-flashing image containers with absolute text overlays
+# Inject Custom CSS for stable, non-flashing image containers with absolute text overlays
 st.markdown("""
 <style>
     .card-container {
@@ -16,6 +18,7 @@ st.markdown("""
         width: 100%;
         height: auto;
         display: block;
+        border-radius: 4px;
     }
     .overlay-text {
         position: absolute;
@@ -24,9 +27,9 @@ st.markdown("""
         transform: translate(-50%, -50%);
         font-family: 'Courier New', Courier, monospace;
         font-weight: bold;
-        font-size: 4vw; /* Scales dynamically with screen width */
+        font-size: 3.5vw; /* Scales dynamically with screen width */
         white-space: nowrap;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        text-shadow: 3px 3px 5px rgba(0,0,0,1); /* Deep shadow for heavy readability */
     }
     .color-cyan { color: #00f0ff; }
     .color-yellow { color: #ffeb00; }
@@ -38,6 +41,23 @@ st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
+
+# ------------------------------------------------------------------
+# BASE64 IMAGE ENCODER (Eliminates broken browser paths completely)
+# ------------------------------------------------------------------
+@st.cache_resource
+def get_base64_image(image_path):
+    """Loads a local image file and converts it into a Base64 string for direct HTML injection."""
+    try:
+        if os.path.exists(image_path):
+            with open(image_path, "rb") as img_file:
+                encoded = base64.b64encode(img_file.read()).decode()
+            return f"data:image/jpeg;base64,{encoded}"
+        else:
+            # Fallback if image file is entirely missing from the directory
+            return "https://via.placeholder.com/400x300?text=File+Not+Found"
+    except Exception:
+        return "https://via.placeholder.com/400x300?text=Error+Loading"
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
@@ -66,12 +86,18 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
+        # --- Pre-convert local images to Base64 (cached instantly) ---
+        img1_b64 = get_base64_image("Gemini_U1.jpg")
+        img2_b64 = get_base64_image("Gemini_U2.jpg")
+        img3_b64 = get_base64_image("Gemini_U3.jpg")
+        hz_b64 = get_base64_image("HZ.jpg")
+        
         # --- UNIT 1 ---
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
             i1.markdown(f"""
             <div class="card-container">
-                <img src="app/static/Gemini_U1.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U1+Background';">
+                <img src="{img1_b64}" class="card-image">
                 <div class="overlay-text color-cyan">{u1_val}</div>
             </div>
             """, unsafe_style_with_html=True)
@@ -81,7 +107,7 @@ try:
         if u2_val != "N/A":
             i2.markdown(f"""
             <div class="card-container">
-                <img src="app/static/Gemini_U2.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U2+Background';">
+                <img src="{img2_b64}" class="card-image">
                 <div class="overlay-text color-cyan">{u2_val}</div>
             </div>
             """, unsafe_style_with_html=True)
@@ -91,7 +117,7 @@ try:
         if u3_val != "N/A":
             i3.markdown(f"""
             <div class="card-container">
-                <img src="app/static/Gemini_U3.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=U3+Background';">
+                <img src="{img3_b64}" class="card-image">
                 <div class="overlay-text color-cyan">{u3_val}</div>
             </div>
             """, unsafe_style_with_html=True)
@@ -101,7 +127,7 @@ try:
         if hz_val != "N/A":
             i4.markdown(f"""
             <div class="card-container">
-                <img src="app/static/HZ.jpg" class="card-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/400x300?text=HZ+Background';">
+                <img src="{hz_b64}" class="card-image">
                 <div class="overlay-text color-yellow">{hz_val}</div>
             </div>
             """, unsafe_style_with_html=True)
