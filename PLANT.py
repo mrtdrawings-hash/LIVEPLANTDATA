@@ -12,38 +12,15 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# CLOUD-SAFE STATIC ASSET CACHING LAYER
+# GITHUB RAW ASSET LINK PRODUCTION
 # ------------------------------------------------------------------
-@st.cache_resource
-def load_base_template_as_b64(filename):
-    """
-    Opens the local file from GitHub repository once, processes it,
-    and caches it permanently as a Base64 URI string in cloud RAM.
-    This entirely prevents container redraw/vanishing during refreshes.
-    """
-    try:
-        # Step 1: Open and normalize image framework
-        png_img = Image.open(filename).convert("RGBA")
-        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-        solid_bg.paste(png_img, (0, 0), png_img)
-        rgba_img = solid_bg.convert("RGBA")
-        
-        # Step 2: Save to a temporary memory buffer as JPEG bytes
-        import io
-        buffer = io.BytesIO()
-        rgba_img.convert("RGB").save(buffer, format="JPEG", quality=95)
-        b64_str = base64.b64encode(buffer.getvalue()).decode()
-        
-        # Return standard web-usable data URI format
-        return f"data:image/jpeg;base64,{b64_str}"
-    except Exception as e:
-        # Safe fallback block layout if the file is tracked incorrectly on GitHub
-        fallback = Image.new("RGBA", (400, 250), (20, 25, 35, 255))
-        import io
-        buffer = io.BytesIO()
-        fallback.convert("RGB").save(buffer, format="JPEG")
-        b64_str = base64.b64encode(buffer.getvalue()).decode()
-        return f"data:image/jpeg;base64,{b64_str}"
+GITHUB_USER = "mrtdrawings-hash"  
+GITHUB_REPO = "LIVEPLANTDATA"        
+GITHUB_BRANCH = "main"
+
+def get_github_raw_url(filename):
+    """Maps the direct raw URL link to pull image assets directly from GitHub."""
+    return f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{filename}"
 
 # ------------------------------------------------------------------
 # ORIGINAL SEVEN-SEGMENT VECTOR LOGIC
@@ -94,40 +71,37 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 # ------------------------------------------------------------------
-# HIGH-SPEED DYNAMIC PAYLOAD COUPLER
+# HIGH-SPEED DYNAMIC PAYLOAD COUPLER (ZERO VANISHING/FLASHING)
 # ------------------------------------------------------------------
 def render_live_instrument_card(value, filename, is_frequency=False):
     """
-    Generates a transient dynamic layer only for text updates and overlays
-    it seamlessly into a cached non-refreshing HTML frame.
+    Renders text numbers to a transparent layer and displays it over 
+    the cached background image using standard CSS layout overlays.
     """
-    # Fetch permanent image layout instantly from cloud RAM cache
-    cached_b64 = load_base_template_as_b64(filename)
+    # Fetch background direct raw link from your GitHub Repository
+    img_url = get_github_raw_url(filename)
     
-    # Text Color Settings
     if is_frequency:
         text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-        css_color = "#ffeb00"
     else:
         text_color = (0, 240, 255, 255)  # Electric Cyan
-        css_color = "#00f0ff"
         
-    # Generate transparent dynamic text vector using your core implementation
+    # Generate dynamic, clear transparent layer containing only your vector string values
     overlay = Image.new("RGBA", (400, 250), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     draw_vector_string(draw, str(value), 200, 125, text_color)
     
-    # Convert overlay text matrix to Base64 format
+    # Save transient layer text matrix directly to Base64 text string
     import io
     txt_buffer = io.BytesIO()
     overlay.save(txt_buffer, format="PNG")
     txt_b64 = base64.b64encode(txt_buffer.getvalue()).decode()
     txt_uri = f"data:image/png;base64,{txt_b64}"
     
-    # Display using static nested components to prevent rendering container reset
+    # Nested HTML block that lets the browser cache the base dial image natively via URL
     html_layout = f"""
     <div style="position: relative; width: 100%; display: inline-block;">
-        <img src="{cached_b64}" style="width: 100%; height: auto; display: block; border-radius: 4px;">
+        <img src="{img_url}" style="width: 100%; height: auto; display: block; border-radius: 4px;">
         <img src="{txt_uri}" style="position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; mix-blend-mode: screen;">
     </div>
     """
@@ -135,7 +109,7 @@ def render_live_instrument_card(value, filename, is_frequency=False):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Set up unchanging layout components to prevent browser page resetting
+# Static structural setup columns
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
