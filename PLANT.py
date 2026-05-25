@@ -100,7 +100,7 @@ css_styles = """
 /* Digital LED Panel Character Looks */
 .digital-text {
     font-family: 'Courier New', Courier, monospace;
-    font-weight: 200;
+    font-weight: 100;
     font-size: clamp(2.5rem, 6vw, 4.2rem); /* Scalable font based on column widths */
     letter-spacing: 2px;
     text-shadow: 0px 0px 12px rgba(0,0,0,0.8);
@@ -167,22 +167,22 @@ try:
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
         # UNIT 1 DISPLAY FRAME
-        m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
+        m1.metric(label="UNIT 1 Live Generation", value=f"{u1_val} MW")
         card1 = display_flicker_free_card(u1_val, "u1", is_frequency=False)
         i1.markdown(card1, unsafe_allow_html=True)
 
         # UNIT 2 DISPLAY FRAME
-        m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
+        m2.metric(label="UNIT 2 Live Generation", value=f"{u2_val} MW")
         card2 = display_flicker_free_card(u2_val, "u2", is_frequency=False)
         i2.markdown(card2, unsafe_allow_html=True)
 
         # UNIT 3 DISPLAY FRAME
-        m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
+        m3.metric(label="UNIT 3 Live Generation", value=f"{u3_val} MW")
         card3 = display_flicker_free_card(u3_val, "u3", is_frequency=False)
         i3.markdown(card3, unsafe_allow_html=True)
 
         # GRID FREQUENCY DISPLAY FRAME
-        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
+        m4.metric(label="Grid Live Frequency", value=f"{hz_val} Hz")
         card4 = display_flicker_free_card(hz_val, "hz", is_frequency=True)
         i4.markdown(card4, unsafe_allow_html=True)
 
