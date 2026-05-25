@@ -10,6 +10,24 @@ st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
+# ------------------------------------------------------------------
+# CACHING LAYER: Loads and pre-processes background assets only ONCE
+# ------------------------------------------------------------------
+@st.cache_resource
+def load_and_prepare_base_image(image_filename):
+    """
+    Opens and creates a permanent, solid RGBA base template in memory.
+    This eliminates disk I/O and format conversion lag on every refresh.
+    """
+    try:
+        png_img = Image.open(image_filename).convert("RGBA")
+        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+        solid_bg.paste(png_img, (0, 0), png_img)
+        return solid_bg.convert("RGBA")
+    except Exception as e:
+        st.sidebar.error(f"Failed to load background template {image_filename}: {e}")
+        return None
+
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     """
     Renders thick, bold 7-segment style numbers directly onto pixel coordinates.
@@ -47,9 +65,6 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
 
 def draw_vector_string(draw, text, cx, cy, color):
     """Aligns and scales massive digital strings precisely into the geometric center."""
-    # ------------------------------------------------------------------
-    # FONT SIZE INCREASED: Enlarged dimensions to fill the dial area completely
-    # ------------------------------------------------------------------
     digit_w = 64       
     digit_h = 110       
     thickness = 15      
@@ -66,26 +81,23 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, **kwargs):
-    try:
-        png_img = Image.open(image_filename).convert("RGBA")
-        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-        solid_bg.paste(png_img, (0, 0), png_img)
-        base_img = solid_bg.convert("RGBA")
+    # Fetch the pre-compiled clean base image directly from the cache
+    base_img = load_and_prepare_base_image(image_filename)
+    if base_img is None:
+        return None
         
+    try:
+        # Create a completely fresh, transparent dynamic text layer
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
         # Centering layout coordinates at the exact middle of the images
-        center_x = png_img.size[0] * 0.50
-        center_y = png_img.size[1] * 0.50
+        center_x = base_img.size[0] * 0.50
+        center_y = base_img.size[1] * 0.50
         
-        # Only passing raw numbers (no units text string)
         display_text = f"{value}"
-        
-        # Safely read our state tracking configuration flag
         is_frequency = kwargs.get('is_frequency', False)
         
-        # Fallback keyword extraction check via image name properties
         if "HZ" in image_filename.upper() or "HZ" in value:
             is_frequency = True
             
@@ -96,6 +108,7 @@ def draw_digital_display(value, image_filename, **kwargs):
             
         draw_vector_string(draw, display_text, center_x, center_y, text_color)
                 
+        # Composite the transient vector text directly over a copy of the cached frame
         return Image.alpha_composite(base_img, overlay)
     except Exception:
         return None
