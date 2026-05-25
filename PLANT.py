@@ -62,7 +62,6 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, is_frequency=False):
-    # Safe path resolution lookup
     paths_to_check = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -90,10 +89,10 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         center_x = png_img.size[0] * 0.50
         center_y = png_img.size[1] * 0.50
         
-        if is_frequency:
-            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
+        if is_frequency or "HZ" in image_filename.upper():
+            text_color = (255, 235, 0, 255)  # Yellow
         else:
-            text_color = (0, 240, 255, 255)  # Electric Cyan
+            text_color = (0, 240, 255, 255)  # Cyan
             
         draw_vector_string(draw, str(value), center_x, center_y, text_color)
         return Image.alpha_composite(base_img, overlay)
@@ -104,12 +103,9 @@ def draw_digital_display(value, image_filename, is_frequency=False):
 # HIGH-SPEED FLICKERLESS BASE64 CONVERTER
 # ------------------------------------------------------------------
 def PIL_to_html_img(pil_img):
-    """
-    Converts a PIL image directly into an inline Base64 data URI string.
-    Bypasses Streamlit network image fetches entirely to stop flashing.
-    """
+    """Converts PIL images to inline data URIs to kill stale ghost elements."""
     if pil_img is None:
-        return '<div style="width:100%; max-width:400px; aspect-ratio:400/250; background:#111622; border-radius:6px; margin:0 auto;"></div>'
+        return '<div style="width:100%; max-width:400px; aspect-ratio:400/250; background:#111; border-radius:6px; margin:0 auto;"></div>'
     
     buffered = io.BytesIO()
     pil_img.save(buffered, format="PNG")
@@ -122,20 +118,21 @@ def PIL_to_html_img(pil_img):
     """
 
 # ------------------------------------------------------------------
-# LAYOUT DISPLAY NODES
+# MAIN LAYOUT GRID SETUP WITH STATIC DOM KEYS
 # ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4 = st.columns(4, key="plant_grid_system")
 
+# Form unique static container tracking points
 with col1:
-    i1 = st.empty()
+    i1 = st.empty(key="panel_u1")
 with col2:
-    i2 = st.empty()
+    i2 = st.empty(key="panel_u2")
 with col3:
-    i3 = st.empty()
+    i3 = st.empty(key="panel_u3")
 with col4:
-    i4 = st.empty()
+    i4 = st.empty(key="panel_hz")
 
 try:
     response = requests.get(url, timeout=4)
@@ -146,7 +143,7 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # Render clean vector digits over instruments without extra text labels
+        # Draw and insert dynamically via instant HTML injection blocks
         img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
         i1.markdown(PIL_to_html_img(img1), unsafe_allow_html=True)
 
@@ -160,7 +157,7 @@ try:
         i4.markdown(PIL_to_html_img(img4), unsafe_allow_html=True)
 
 except Exception as e:
-    st.error(f"Live Plant Network Link Error: {e}")
+    st.error(f"Live Telemetry Link Error: {e}")
 
 if auto_refresh:
     time.sleep(refresh_interval)
