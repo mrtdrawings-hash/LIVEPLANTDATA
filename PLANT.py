@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import time
 import os
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 st.title("⚡ NORTH CHENNAI THERMAL POWER STATION 1 LIVE MW ⚡")
@@ -12,32 +12,53 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# TAHOMA TRUE TYPE FONT ENGINE LOGIC
+# OLD VECTOR DIGIT ENGINE - RESTORED AND RESCALED LARGER
 # ------------------------------------------------------------------
-def get_tahoma_font(font_size):
-    """
-    Locates and loads Tahoma font across Windows and Linux (Streamlit Cloud) envs.
-    """
-    # Common system font paths for Tahoma
-    possible_paths = [
-        "C:\\Windows\\Fonts\\tahoma.ttf",          # Windows Local
-        "C:\\Windows\\Fonts\\tahomabd.ttf",        # Windows Bold Local
-        "/usr/share/fonts/truetype/tahoma/tahoma.ttf", # Linux/Cloud standard
-        "tahoma.ttf"                               # App root directory
-    ]
+def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
+    t = thickness
+    mid_y = h / 2
     
-    for path in possible_paths:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, font_size)
-            except Exception:
-                continue
-                
-    # Fallback to default engine font if Tahoma isn't installed anywhere on the host system
-    try:
-        return ImageFont.load_default()
-    except Exception:
-        return None
+    segments = {
+        'a': (t, 0, w - 2*t, t),               # Top
+        'b': (w - t, t, t, mid_y - t),         # Top Right
+        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
+        'd': (t, h - t, w - 2*t, t),           # Bottom
+        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
+        'f': (0, t, t, mid_y - t),             # Top Left
+        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
+    }
+    
+    mapping = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
+        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
+        '-': 'g'
+    }
+    
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        return
+
+    active = mapping.get(char, '')
+    for seg in active:
+        sx, sy, sw, sh = segments[seg]
+        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+
+def draw_vector_string(draw, text, cx, cy, color):
+    # INCREASED FROM 64x110 TO 80x138 FOR A MUCH BIGGER READING
+    digit_w = 80       
+    digit_h = 138       
+    thickness = 18      # Thicker segments for high visibility
+    spacing = 14       
+    
+    total_w = len(text) * (digit_w + spacing) - spacing
+    start_x = cx - (total_w / 2)
+    start_y = cy - (digit_h / 2)
+    
+    curr_x = start_x
+    for char in text:
+        if char in '0123456789.-':
+            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
+        curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, is_frequency=False):
     paths_to_check = [
@@ -64,41 +85,22 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
-        # Determine Color
+        center_x = png_img.size[0] * 0.50
+        # Centering Y lowered slightly to 0.52 to fit the taller digits perfectly
+        center_y = png_img.size[1] * 0.52
+        
         if is_frequency or "HZ" in image_filename.upper():
             text_color = (255, 235, 0, 255)  # Yellow
-            font_size = 110                  # Big, crisp font scale for Hz
         else:
             text_color = (0, 240, 255, 255)  # Cyan
-            font_size = 135                  # Big, crisp font scale for MW
             
-        # Load Tahoma font dynamically
-        font = get_tahoma_font(font_size)
-        
-        # Calculate text boundaries for dynamic centering
-        text_str = str(value)
-        if font:
-            # Get text bounding box dimensions: (left, top, right, bottom)
-            bbox = draw.textbbox((0, 0), text_str, font=font)
-            text_w = bbox[2] - bbox[0]
-            text_h = bbox[3] - bbox[1]
-        else:
-            text_w, text_h = 150, 80 # Generic fallbacks
-            
-        # Calculate precise canvas placements
-        center_x = (png_img.size[0] - text_w) / 2
-        # Offset adjusted slightly upward to perfectly mirror your dial configurations
-        center_y = ((png_img.size[1] - text_h) / 2) - (text_h * 0.15) 
-        
-        # Render clean true type font directly onto the layout
-        draw.text((center_x, center_y), text_str, fill=text_color, font=font)
-        
+        draw_vector_string(draw, str(value), center_x, center_y, text_color)
         return Image.alpha_composite(base_img, overlay)
     except Exception:
         return None
 
 # ------------------------------------------------------------------
-# LAYOUT FRAME SETUP
+# LAYOUT FRAME SETUP (STABLE & PERSISTENT CONFIGURATION)
 # ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
