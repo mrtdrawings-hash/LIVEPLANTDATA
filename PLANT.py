@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import time
-import os
+import base64
 from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
@@ -12,59 +12,41 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# SYSTEM PATH RESOLVER (Multi-Location Check)
-# ------------------------------------------------------------------
-def find_image_file(filename):
-    """
-    Checks multiple potential directories to find the absolute path of the image.
-    This bypasses any virtual environment or streamlit cache folder redirection.
-    """
-    # Location 1: Where the script is saved
-    script_dir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
-    if os.path.exists(script_dir_path):
-        return script_dir_path
-        
-    # Location 2: Current working directory (where you typed the streamlit run command)
-    cwd_path = os.path.join(os.getcwd(), filename)
-    if os.path.exists(cwd_path):
-        return cwd_path
-
-    # Location 3: Safe fallback if not found anywhere
-    return None
-
-# ------------------------------------------------------------------
-# CACHING LAYER WITH SEAMLESS IMAGE LOADING
+# CLOUD-SAFE STATIC ASSET CACHING LAYER
 # ------------------------------------------------------------------
 @st.cache_resource
-def load_base_template(filename):
+def load_base_template_as_b64(filename):
     """
-    Finds, opens, and retains background assets in system RAM.
-    If the file does not exist, returns a dynamically generated template
-    to prevent NoneType errors.
+    Opens the local file from GitHub repository once, processes it,
+    and caches it permanently as a Base64 URI string in cloud RAM.
+    This entirely prevents container redraw/vanishing during refreshes.
     """
-    abs_path = find_image_file(filename)
     try:
-        if abs_path and os.path.exists(abs_path):
-            png_img = Image.open(abs_path).convert("RGBA")
-            solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-            solid_bg.paste(png_img, (0, 0), png_img)
-            return solid_bg.convert("RGBA")
-    except Exception:
-        pass
-    
-    # Fallback Template: If file is missing or errors out, create a clean 400x250 panel in memory
-    fallback = Image.new("RGBA", (400, 250), (20, 25, 35, 255))
-    draw = ImageDraw.Draw(fallback)
-    # Draw a subtle border line to indicate a placeholder panel
-    draw.rectangle([0, 0, 399, 249], outline=(50, 60, 80, 255), width=3)
-    
-    # Text alert on the fallback panel helping you troubleshoot
-    draw.text((20, 20), f"File Missing From Directory", fill=(255,100,100,255))
-    draw.text((20, 45), f"Expected: {filename}", fill=(200,200,200,255))
-    return fallback
+        # Step 1: Open and normalize image framework
+        png_img = Image.open(filename).convert("RGBA")
+        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+        solid_bg.paste(png_img, (0, 0), png_img)
+        rgba_img = solid_bg.convert("RGBA")
+        
+        # Step 2: Save to a temporary memory buffer as JPEG bytes
+        import io
+        buffer = io.BytesIO()
+        rgba_img.convert("RGB").save(buffer, format="JPEG", quality=95)
+        b64_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Return standard web-usable data URI format
+        return f"data:image/jpeg;base64,{b64_str}"
+    except Exception as e:
+        # Safe fallback block layout if the file is tracked incorrectly on GitHub
+        fallback = Image.new("RGBA", (400, 250), (20, 25, 35, 255))
+        import io
+        buffer = io.BytesIO()
+        fallback.convert("RGB").save(buffer, format="JPEG")
+        b64_str = base64.b64encode(buffer.getvalue()).decode()
+        return f"data:image/jpeg;base64,{b64_str}"
 
 # ------------------------------------------------------------------
-# ORIGINAL VECTOR DIGIT CODES
+# ORIGINAL SEVEN-SEGMENT VECTOR LOGIC
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
@@ -111,38 +93,49 @@ def draw_vector_string(draw, text, cx, cy, color):
             draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
         curr_x += digit_w + spacing
 
-def draw_digital_display(value, image_filename, **kwargs):
-    # Guaranteed to return a valid PIL image canvas (either your file or a fallback block)
-    base_img = load_base_template(image_filename)
+# ------------------------------------------------------------------
+# HIGH-SPEED DYNAMIC PAYLOAD COUPLER
+# ------------------------------------------------------------------
+def render_live_instrument_card(value, filename, is_frequency=False):
+    """
+    Generates a transient dynamic layer only for text updates and overlays
+    it seamlessly into a cached non-refreshing HTML frame.
+    """
+    # Fetch permanent image layout instantly from cloud RAM cache
+    cached_b64 = load_base_template_as_b64(filename)
+    
+    # Text Color Settings
+    if is_frequency:
+        text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
+        css_color = "#ffeb00"
+    else:
+        text_color = (0, 240, 255, 255)  # Electric Cyan
+        css_color = "#00f0ff"
         
-    try:
-        # Generate text overlay layer
-        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        
-        center_x = base_img.size[0] * 0.50
-        center_y = base_img.size[1] * 0.50
-        
-        display_text = f"{value}"
-        is_frequency = kwargs.get('is_frequency', False)
-        
-        if "HZ" in image_filename.upper() or "HZ" in value:
-            is_frequency = True
-            
-        if is_frequency:
-            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-        else:
-            text_color = (0, 240, 255, 255)  # Electric Cyan
-            
-        draw_vector_string(draw, display_text, center_x, center_y, text_color)
-                
-        return Image.alpha_composite(base_img, overlay)
-    except Exception:
-        return base_img
+    # Generate transparent dynamic text vector using your core implementation
+    overlay = Image.new("RGBA", (400, 250), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    draw_vector_string(draw, str(value), 200, 125, text_color)
+    
+    # Convert overlay text matrix to Base64 format
+    import io
+    txt_buffer = io.BytesIO()
+    overlay.save(txt_buffer, format="PNG")
+    txt_b64 = base64.b64encode(txt_buffer.getvalue()).decode()
+    txt_uri = f"data:image/png;base64,{txt_b64}"
+    
+    # Display using static nested components to prevent rendering container reset
+    html_layout = f"""
+    <div style="position: relative; width: 100%; display: inline-block;">
+        <img src="{cached_b64}" style="width: 100%; height: auto; display: block; border-radius: 4px;">
+        <img src="{txt_uri}" style="position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; mix-blend-mode: screen;">
+    </div>
+    """
+    return html_layout
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent display layout configuration
+# Set up unchanging layout components to prevent browser page resetting
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -167,36 +160,32 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # UNIT 1
+        # UNIT 1 DISPLAY FRAME
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True, clamp=True)
+            card1 = render_live_instrument_card(u1_val, "Gemini_U1.jpg", is_frequency=False)
+            i1.markdown(card1, unsafe_style_with_html=True)
 
-        # UNIT 2
+        # UNIT 2 DISPLAY FRAME
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True, clamp=True)
+            card2 = render_live_instrument_card(u2_val, "Gemini_U2.jpg", is_frequency=False)
+            i2.markdown(card2, unsafe_style_with_html=True)
 
-        # UNIT 3
+        # UNIT 3 DISPLAY FRAME
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
         if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True, clamp=True)
+            card3 = render_live_instrument_card(u3_val, "Gemini_U3.jpg", is_frequency=False)
+            i3.markdown(card3, unsafe_style_with_html=True)
 
-        # GRID FREQUENCY
+        # GRID FREQUENCY DISPLAY FRAME
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True, clamp=True)
+            card4 = render_live_instrument_card(hz_val, "HZ.jpg", is_frequency=True)
+            i4.markdown(card4, unsafe_style_with_html=True)
 
 except Exception as e:
-    st.error(f"Connection Error: {e}")
+    st.error(f"Network Connection Timeout/Error: {e}")
 
 if auto_refresh:
     time.sleep(refresh_interval)
