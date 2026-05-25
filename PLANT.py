@@ -4,8 +4,8 @@ import time
 import base64
 import os
 
-st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NCTPS STAGE 1 LIVE MW ⚡")
+st.set_page_config(page_title="NCTPS STAGE 1 LIVE MW DASHBOARD", layout="wide")
+st.title("⚡ NCTPS STAGE 1 LIVE MW DATA ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
@@ -55,23 +55,23 @@ bg_images = load_base64_backgrounds()
 # ------------------------------------------------------------------
 def render_instrument_card(value, bg_key, is_frequency=False):
     """
-    Renders the background image using a base64 string directly inside the HTML structure.
-    The text values are cleanly overlaid on top of the image coordinates.
+    Renders the background image precisely sized inside the columns.
+    Ensures background image repeats are disabled permanently.
     """
     b64_data = bg_images.get(bg_key, "")
     text_color = "#ffeb00" if is_frequency else "#00f0ff"
     
     html_layout = f"""
-    <div style="position: relative; width: 100%; aspect-ratio: 400/250; 
-                background-image: url('data:image/jpeg;base64,{b64_data}'); 
-                background-size: 100% 100%; background-repeat: no-repeat; 
+    <div style="position: relative; width: 100%; max-width: 400px; aspect-ratio: 400/250; 
+                margin: 0 auto; background-image: url('data:image/jpeg;base64,{b64_data}'); 
+                background-size: contain; background-repeat: no-repeat; background-position: center;
                 border-radius: 6px; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); overflow: hidden;">
         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
                     display: flex; justify-content: center; align-items: center; pointer-events: none;">
             <span style="font-family: 'Courier New', Courier, monospace; font-weight: 900; 
-                         font-size: clamp(1.8rem, 4.5vw, 2.5rem); color: {text_color}; 
+                         font-size: clamp(1.6rem, 4vw, 2.3rem); color: {text_color}; 
                          letter-spacing: 1px; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0px 0px 8px rgba(0,0,0,0.8);
-                         margin-top: 8px; user-select: none;">
+                         margin-top: 10px; user-select: none;">
                 {value}
             </span>
         </div>
