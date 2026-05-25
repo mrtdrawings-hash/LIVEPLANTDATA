@@ -5,7 +5,7 @@ import base64
 import os
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
+st.title("⚡ NCTPS STAGE 1 LIVE MW ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
@@ -56,12 +56,11 @@ bg_images = load_base64_backgrounds()
 def render_instrument_card(value, bg_key, is_frequency=False):
     """
     Renders the background image using a base64 string directly inside the HTML structure.
-    The text is overlaid cleanly over the image container.
+    The text values are cleanly overlaid on top of the image coordinates.
     """
     b64_data = bg_images.get(bg_key, "")
     text_color = "#ffeb00" if is_frequency else "#00f0ff"
     
-    # CSS overlay framework that centers the text without using flaky JavaScript
     html_layout = f"""
     <div style="position: relative; width: 100%; aspect-ratio: 400/250; 
                 background-image: url('data:image/jpeg;base64,{b64_data}'); 
@@ -88,16 +87,12 @@ url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NC
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    m1 = st.empty()
     i1 = st.empty()
 with col2:
-    m2 = st.empty()
     i2 = st.empty()
 with col3:
-    m3 = st.empty()
     i3 = st.empty()
 with col4:
-    m4 = st.empty()
     i4 = st.empty()
 
 try:
@@ -110,19 +105,15 @@ try:
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
         # UNIT 1 DISPLAY FRAME
-        m1.metric(label="UNIT 1 Live Generation", value=f"{u1_val} MW")
         i1.markdown(render_instrument_card(u1_val, "u1", is_frequency=False), unsafe_allow_html=True)
 
         # UNIT 2 DISPLAY FRAME
-        m2.metric(label="UNIT 2 Live Generation", value=f"{u2_val} MW")
         i2.markdown(render_instrument_card(u2_val, "u2", is_frequency=False), unsafe_allow_html=True)
 
         # UNIT 3 DISPLAY FRAME
-        m3.metric(label="UNIT 3 Live Generation", value=f"{u3_val} MW")
         i3.markdown(render_instrument_card(u3_val, "u3", is_frequency=False), unsafe_allow_html=True)
 
         # GRID FREQUENCY DISPLAY FRAME
-        m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         i4.markdown(render_instrument_card(hz_val, "hz", is_frequency=True), unsafe_allow_html=True)
 
 except Exception as e:
