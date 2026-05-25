@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import time
 import os
 from PIL import Image, ImageDraw
 
@@ -35,13 +34,13 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     mid_y = h / 2
 
     segments = {
-        'a': (t, 0, w - 2*t, t),        # Top
-        'b': (w - t, t, t, mid_y - t),  # Top Right
-        'c': (w - t, mid_y, t, mid_y - t),  # Bottom Right
-        'd': (t, h - t, w - 2*t, t),    # Bottom
-        'e': (0, mid_y, t, mid_y - t),  # Bottom Left
-        'f': (0, t, t, mid_y - t),       # Top Left
-        'g': (t, mid_y - t/2, w - 2*t, t)   # Middle
+        'a': (t, 0, w - 2*t, t),
+        'b': (w - t, t, t, mid_y - t),
+        'c': (w - t, mid_y, t, mid_y - t),
+        'd': (t, h - t, w - 2*t, t),
+        'e': (0, mid_y, t, mid_y - t),
+        'f': (0, t, t, mid_y - t),
+        'g': (t, mid_y - t/2, w - 2*t, t)
     }
 
     mapping = {
@@ -87,64 +86,59 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         center_x = base_img.size[0] * 0.50
         center_y = base_img.size[1] * 0.52
 
-        if is_frequency or "HZ" in image_filename.upper():
-            text_color = (255, 235, 0, 255)
-        else:
-            text_color = (0, 240, 255, 255)
+        text_color = (255, 235, 0, 255) if (is_frequency or "HZ" in image_filename.upper()) else (0, 240, 255, 255)
 
         draw_vector_string(draw, str(value), center_x, center_y, text_color)
         return Image.alpha_composite(base_img, overlay)
     except Exception:
         return None
 
-# ------------------------------------------------------------------
-# LAYOUT FRAME SETUP (STABLE & PERSISTENT CONFIGURATION)
-# ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
+# Static layout stays outside the refresh fragment
 col1, col2, col3, col4 = st.columns(4)
+slot1 = col1.empty()
+slot2 = col2.empty()
+slot3 = col3.empty()
+slot4 = col4.empty()
 
-with col1:
-    i1 = st.empty()
-with col2:
-    i2 = st.empty()
-with col3:
-    i3 = st.empty()
-with col4:
-    i4 = st.empty()
+@st.fragment(run_every=refresh_interval if auto_refresh else None)
+def live_panel():
+    try:
+        response = requests.get(url, timeout=4)
 
-try:
-    response = requests.get(url, timeout=4)
-    if response.status_code == 200 and (nctps_data := response.json()):
+        if response.status_code == 200:
+            nctps_data = response.json() or {}
 
-        u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-        u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-        u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-        hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+            u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+            u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
 
-        if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True)
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
+                if img1:
+                    slot1.image(img1, use_container_width=True)
 
-        if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True)
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+                if img2:
+                    slot2.image(img2, use_container_width=True)
 
-        if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True)
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+                if img3:
+                    slot3.image(img3, use_container_width=True)
 
-        if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True)
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+                if img4:
+                    slot4.image(img4, use_container_width=True)
 
-except Exception as e:
-    st.error(f"Live Telemetry Link Error: {e}")
+        else:
+            st.error(f"Server returned status code {response.status_code}")
 
-if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+    except Exception as e:
+        st.error(f"Live Telemetry Link Error: {e}")
+
+live_panel()
