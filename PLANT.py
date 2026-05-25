@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import time
+import base64
+import os
 from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
@@ -10,15 +12,114 @@ st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
+# ------------------------------------------------------------------
+# HIGH-SPEED ASSET PRE-LOADER & DIMENSION RESOLVER
+# ------------------------------------------------------------------
+@st.cache_resource
+def load_image_dimensions_and_bg():
+    """
+    Locates image files once, extracts native dimensions to prevent scaling 
+    distortions, and encodes backgrounds into permanent system RAM cache.
+    """
+    filenames = {
+        "u1": "Gemini_U1.jpg",
+        "u2": "Gemini_U2.jpg",
+        "u3": "Gemini_U3.jpg",
+        "hz": "HZ.jpg"
+    }
+    
+    bg_data = {}
+    
+    for key, filename in filenames.items():
+        paths_to_check = [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), filename),
+            os.path.join(os.getcwd(), filename),
+            filename,
+            filename.lower(),
+            filename.upper()
+        ]
+        
+        target_path = None
+        for p in paths_to_check:
+            if os.path.exists(p):
+                target_path = p
+                break
+                
+        width, height = 400, 250  # Default safe fallbacks
+        encoded_string = ""
+        
+        if target_path:
+            try:
+                with Image.open(target_path) as img:
+                    width, height = img.size
+                with open(target_path, "rb") as img_file:
+                    encoded_string = base64.b64encode(img_file.read()).decode()
+            except Exception:
+                pass
+                
+        bg_data[key] = {
+            "width": width,
+            "height": height,
+            "b64": encoded_string
+        }
+    return bg_data
+
+# Initialize asset cache memory
+bg_metadata = load_image_dimensions_and_bg()
+
+# Construct permanent CSS layout injection rules
+css_rules = []
+for key, data in bg_metadata.items():
+    if data["b64"]:
+        css_rules.append(f"""
+        .bg-{key} {{
+            background-image: url('data:image/jpeg;base64,{data["b64"]}');
+        }}
+        """)
+    else:
+        # Sleek dark fallback panel background rule if physical asset file missing
+        css_rules.append(f"""
+        .bg-{key} {{
+            background-color: #141923;
+            border: 2px solid #323c50;
+        }}
+        """)
+
+# Inject style parameters to browser engine once (Prevents image flash)
+st.markdown(f"""
+<style>
+{" ".join(css_rules)}
+.plant-card {{
+    position: relative;
+    width: 100%;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 6px;
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.4);
+    overflow: hidden;
+}}
+.overlay-container {{
+    width: 100%;
+    height: auto;
+    display: block;
+}}
+.overlay-container img {{
+    width: 100%;
+    height: auto;
+    display: block;
+    mix-blend-mode: screen;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------
+# ORIGINAL SEVEN-SEGMENT VECTOR LOGIC
+# ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
-    """
-    Renders thick, bold 7-segment style numbers directly onto pixel coordinates.
-    Bypasses all server font system dependencies permanently.
-    """
     t = thickness
     mid_y = h / 2
     
-    # 7-Segment coordinate line maps: (rel_x, rel_y, width, height)
     segments = {
         'a': (t, 0, w - 2*t, t),               # Top
         'b': (w - t, t, t, mid_y - t),         # Top Right
@@ -36,7 +137,6 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     }
     
     if char == '.':
-        # Enhanced thick decimal point block
         draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
         return
 
@@ -46,10 +146,6 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
         draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
 
 def draw_vector_string(draw, text, cx, cy, color):
-    """Aligns and scales massive digital strings precisely into the geometric center."""
-    # ------------------------------------------------------------------
-    # FONT SIZE INCREASED: Enlarged dimensions to fill the dial area completely
-    # ------------------------------------------------------------------
     digit_w = 64       
     digit_h = 110       
     thickness = 15      
@@ -65,44 +161,51 @@ def draw_vector_string(draw, text, cx, cy, color):
             draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
         curr_x += digit_w + spacing
 
-def draw_digital_display(value, image_filename, **kwargs):
-    try:
-        png_img = Image.open(image_filename).convert("RGBA")
-        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-        solid_bg.paste(png_img, (0, 0), png_img)
-        base_img = solid_bg.convert("RGBA")
+# ------------------------------------------------------------------
+# INTERFACE COUPLER (ZERO VANISHING/FLASHING)
+# ------------------------------------------------------------------
+def render_live_instrument_card(value, key, is_frequency=False):
+    """
+    Generates a transient transparent image overlay containing only the text string 
+    digits and nests it inside a parent container styled with the static background rule.
+    """
+    data = bg_metadata[key]
+    w = data["width"]
+    h = data["height"]
+    
+    # Generate transparent dynamic text vector layer matching exact layout dimensions
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    
+    center_x = w * 0.50
+    center_y = h * 0.50
+    
+    if is_frequency:
+        text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
+    else:
+        text_color = (0, 240, 255, 255)  # Electric Cyan
         
-        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        
-        # Centering layout coordinates at the exact middle of the images
-        center_x = png_img.size[0] * 0.50
-        center_y = png_img.size[1] * 0.50
-        
-        # Only passing raw numbers (no units text string)
-        display_text = f"{value}"
-        
-        # Safely read our state tracking configuration flag
-        is_frequency = kwargs.get('is_frequency', False)
-        
-        # Fallback keyword extraction check via image name properties
-        if "HZ" in image_filename.upper() or "HZ" in value:
-            is_frequency = True
-            
-        if is_frequency:
-            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-        else:
-            text_color = (0, 240, 255, 255)  # Electric Cyan
-            
-        draw_vector_string(draw, display_text, center_x, center_y, text_color)
-                
-        return Image.alpha_composite(base_img, overlay)
-    except Exception:
-        return None
+    draw_vector_string(draw, str(value), center_x, center_y, text_color)
+    
+    import io
+    txt_buffer = io.BytesIO()
+    overlay.save(txt_buffer, format="PNG")
+    txt_b64 = base64.b64encode(txt_buffer.getvalue()).decode()
+    txt_uri = f"data:image/png;base64,{txt_b64}"
+    
+    # Render layout. Parent container classes (bg-u1 etc) do not reload, preventing flashes.
+    html_layout = f"""
+    <div class="plant-card bg-{key}">
+        <div class="overlay-container">
+            <img src="{txt_uri}">
+        </div>
+    </div>
+    """
+    return html_layout
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Permanent display components frame setup (Eliminates flashing updates)
+# Unchanging layout block setup
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -130,30 +233,26 @@ try:
         # UNIT 1
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
         if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
-            if img1:
-                i1.image(img1, use_container_width=True, clamp=True)
+            card1 = render_live_instrument_card(u1_val, "u1", is_frequency=False)
+            i1.markdown(card1, unsafe_allow_html=True)
 
         # UNIT 2
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
         if u2_val != "N/A":
-            img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
-            if img2:
-                i2.image(img2, use_container_width=True, clamp=True)
+            card2 = render_live_instrument_card(u2_val, "u2", is_frequency=False)
+            i2.markdown(card2, unsafe_allow_html=True)
 
         # UNIT 3
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
         if u3_val != "N/A":
-            img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
-            if img3:
-                i3.image(img3, use_container_width=True, clamp=True)
+            card3 = render_live_instrument_card(u3_val, "u3", is_frequency=False)
+            i3.markdown(card3, unsafe_allow_html=True)
 
         # GRID FREQUENCY
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
         if hz_val != "N/A":
-            img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
-            if img4:
-                i4.image(img4, use_container_width=True, clamp=True)
+            card4 = render_live_instrument_card(hz_val, "hz", is_frequency=True)
+            i4.markdown(card4, unsafe_allow_html=True)
 
 except Exception as e:
     st.error(f"Connection Error: {e}")
