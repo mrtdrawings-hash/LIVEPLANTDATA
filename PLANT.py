@@ -3,7 +3,6 @@ import requests
 import time
 import base64
 import os
-from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
@@ -13,13 +12,13 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# HIGH-SPEED ASSET PRE-LOADER & DIMENSION RESOLVER
+# PERMANENT ASSET CACHING LAYER (Bypasses Re-loads)
 # ------------------------------------------------------------------
 @st.cache_resource
-def load_image_dimensions_and_bg():
+def load_base64_backgrounds():
     """
-    Locates image files once, extracts native dimensions to prevent scaling 
-    distortions, and encodes backgrounds into permanent system RAM cache.
+    Reads local image files once and saves them into the RAM cache.
+    Bypasses file system lookups during rapid refresh intervals.
     """
     filenames = {
         "u1": "Gemini_U1.jpg",
@@ -28,15 +27,12 @@ def load_image_dimensions_and_bg():
         "hz": "HZ.jpg"
     }
     
-    bg_data = {}
-    
+    encoded_b64 = {}
     for key, filename in filenames.items():
         paths_to_check = [
             os.path.join(os.path.dirname(os.path.abspath(__file__)), filename),
             os.path.join(os.getcwd(), filename),
-            filename,
-            filename.lower(),
-            filename.upper()
+            filename
         ]
         
         target_path = None
@@ -45,167 +41,107 @@ def load_image_dimensions_and_bg():
                 target_path = p
                 break
                 
-        width, height = 400, 250  # Default safe fallbacks
-        encoded_string = ""
-        
+        b64_str = ""
         if target_path:
             try:
-                with Image.open(target_path) as img:
-                    width, height = img.size
                 with open(target_path, "rb") as img_file:
-                    encoded_string = base64.b64encode(img_file.read()).decode()
+                    b64_str = base64.b64encode(img_file.read()).decode()
             except Exception:
                 pass
-                
-        bg_data[key] = {
-            "width": width,
-            "height": height,
-            "b64": encoded_string
-        }
-    return bg_data
+        encoded_b64[key] = b64_str
+        
+    return encoded_b64
 
-# Initialize asset cache memory
-bg_metadata = load_image_dimensions_and_bg()
+# Load backgrounds into memory cache
+bg_images = load_base64_backgrounds()
 
-# Construct permanent CSS layout injection rules
-css_rules = []
-for key, data in bg_metadata.items():
-    if data["b64"]:
-        css_rules.append(f"""
-        .bg-{key} {{
-            background-image: url('data:image/jpeg;base64,{data["b64"]}');
-        }}
-        """)
-    else:
-        # Sleek dark fallback panel background rule if physical asset file missing
-        css_rules.append(f"""
-        .bg-{key} {{
-            background-color: #141923;
-            border: 2px solid #323c50;
-        }}
-        """)
-
-# Inject style parameters to browser engine once (Prevents image flash)
-st.markdown(f"""
+# ------------------------------------------------------------------
+# NO-FLASH STYLING BLOCKS (Pure HTML Layouts)
+# ------------------------------------------------------------------
+css_styles = """
 <style>
-{" ".join(css_rules)}
-.plant-card {{
+.instrument-wrapper {
     position: relative;
     width: 100%;
+    aspect-ratio: 400 / 250; /* Matches instrument card proportions */
     background-size: 100% 100%;
     background-repeat: no-repeat;
     background-position: center;
     border-radius: 6px;
-    box-shadow: 0px 4px 12px rgba(0,0,0,0.4);
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
     overflow: hidden;
-}}
-.overlay-container {{
+}
+
+/* Base64 styling injected straight into the container background */
+.bg-u1 { background-image: url('data:image/jpeg;base64,""" + bg_images["u1"] + """'); }
+.bg-u2 { background-image: url('data:image/jpeg;base64,""" + bg_images["u2"] + """'); }
+.bg-u3 { background-image: url('data:image/jpeg;base64,""" + bg_images["u3"] + """'); }
+.bg-hz { background-image: url('data:image/jpeg;base64,""" + bg_images["hz"] + """'); }
+
+/* Fallbacks if files are not present in the current workspace directory */
+.instrument-wrapper:not([style*="data:image"]) {
+    background-color: #111622;
+    border: 2px solid #283143;
+}
+
+/* Dynamic Numeric Text Layer centered over the dials */
+.telemetry-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: auto;
-    display: block;
-}}
-.overlay-container img {{
-    width: 100%;
-    height: auto;
-    display: block;
-    mix-blend-mode: screen;
-}}
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+/* Digital LED Panel Character Looks */
+.digital-text {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 900;
+    font-size: clamp(2.5rem, 6vw, 4.2rem); /* Scalable font based on column widths */
+    letter-spacing: 2px;
+    text-shadow: 0px 0px 12px rgba(0,0,0,0.8);
+    user-select: none;
+}
+
+.color-cyan {
+    color: #00f0ff;
+}
+
+.color-yellow {
+    color: #ffeb00;
+}
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(css_styles, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# ORIGINAL SEVEN-SEGMENT VECTOR LOGIC
+# LIGHTWEIGHT INTERFACE INJECTOR
 # ------------------------------------------------------------------
-def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
-    t = thickness
-    mid_y = h / 2
-    
-    segments = {
-        'a': (t, 0, w - 2*t, t),               # Top
-        'b': (w - t, t, t, mid_y - t),         # Top Right
-        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
-        'd': (t, h - t, w - 2*t, t),           # Bottom
-        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
-        'f': (0, t, t, mid_y - t),             # Top Left
-        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
-    }
-    
-    mapping = {
-        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
-        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
-        '-': 'g'
-    }
-    
-    if char == '.':
-        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
-        return
-
-    active = mapping.get(char, '')
-    for seg in active:
-        sx, sy, sw, sh = segments[seg]
-        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
-
-def draw_vector_string(draw, text, cx, cy, color):
-    digit_w = 64       
-    digit_h = 110       
-    thickness = 15      
-    spacing = 12       
-    
-    total_w = len(text) * (digit_w + spacing) - spacing
-    start_x = cx - (total_w / 2)
-    start_y = cy - (digit_h / 2)
-    
-    curr_x = start_x
-    for char in text:
-        if char in '0123456789.-':
-            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
-        curr_x += digit_w + spacing
-
-# ------------------------------------------------------------------
-# INTERFACE COUPLER (ZERO VANISHING/FLASHING)
-# ------------------------------------------------------------------
-def render_live_instrument_card(value, key, is_frequency=False):
+def display_flicker_free_card(value, bg_key, is_frequency=False):
     """
-    Generates a transient transparent image overlay containing only the text string 
-    digits and nests it inside a parent container styled with the static background rule.
+    Renders standard text characters directly on top of the cached background container.
+    Since only text variations update, the browser never clears or re-renders the panel container.
     """
-    data = bg_metadata[key]
-    w = data["width"]
-    h = data["height"]
+    text_color_class = "color-yellow" if is_frequency else "color-cyan"
     
-    # Generate transparent dynamic text vector layer matching exact layout dimensions
-    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    
-    center_x = w * 0.50
-    center_y = h * 0.50
-    
-    if is_frequency:
-        text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
-    else:
-        text_color = (0, 240, 255, 255)  # Electric Cyan
-        
-    draw_vector_string(draw, str(value), center_x, center_y, text_color)
-    
-    import io
-    txt_buffer = io.BytesIO()
-    overlay.save(txt_buffer, format="PNG")
-    txt_b64 = base64.b64encode(txt_buffer.getvalue()).decode()
-    txt_uri = f"data:image/png;base64,{txt_b64}"
-    
-    # Render layout. Parent container classes (bg-u1 etc) do not reload, preventing flashes.
-    html_layout = f"""
-    <div class="plant-card bg-{key}">
-        <div class="overlay-container">
-            <img src="{txt_uri}">
+    html_card = f"""
+    <div class="instrument-wrapper bg-{bg_key}">
+        <div class="telemetry-overlay">
+            <span class="digital-text {text_color_class}">{value}</span>
         </div>
     </div>
     """
-    return html_layout
+    return html_card
 
+# ------------------------------------------------------------------
+# MAIN TELEMETRY LOOP
+# ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Unchanging layout block setup
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -222,7 +158,7 @@ with col4:
     i4 = st.empty()
 
 try:
-    response = requests.get(url)
+    response = requests.get(url, timeout=4)
     if response.status_code == 200 and (nctps_data := response.json()):
         
         u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
@@ -230,32 +166,28 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # UNIT 1
+        # UNIT 1 DISPLAY FRAME
         m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
-        if u1_val != "N/A":
-            card1 = render_live_instrument_card(u1_val, "u1", is_frequency=False)
-            i1.markdown(card1, unsafe_allow_html=True)
+        card1 = display_flicker_free_card(u1_val, "u1", is_frequency=False)
+        i1.markdown(card1, unsafe_allow_html=True)
 
-        # UNIT 2
+        # UNIT 2 DISPLAY FRAME
         m2.metric(label="UNIT 2 Generation", value=f"{u2_val} MW")
-        if u2_val != "N/A":
-            card2 = render_live_instrument_card(u2_val, "u2", is_frequency=False)
-            i2.markdown(card2, unsafe_allow_html=True)
+        card2 = display_flicker_free_card(u2_val, "u2", is_frequency=False)
+        i2.markdown(card2, unsafe_allow_html=True)
 
-        # UNIT 3
+        # UNIT 3 DISPLAY FRAME
         m3.metric(label="UNIT 3 Generation", value=f"{u3_val} MW")
-        if u3_val != "N/A":
-            card3 = render_live_instrument_card(u3_val, "u3", is_frequency=False)
-            i3.markdown(card3, unsafe_allow_html=True)
+        card3 = display_flicker_free_card(u3_val, "u3", is_frequency=False)
+        i3.markdown(card3, unsafe_allow_html=True)
 
-        # GRID FREQUENCY
+        # GRID FREQUENCY DISPLAY FRAME
         m4.metric(label="Grid Frequency", value=f"{hz_val} Hz")
-        if hz_val != "N/A":
-            card4 = render_live_instrument_card(hz_val, "hz", is_frequency=True)
-            i4.markdown(card4, unsafe_allow_html=True)
+        card4 = display_flicker_free_card(hz_val, "hz", is_frequency=True)
+        i4.markdown(card4, unsafe_allow_html=True)
 
 except Exception as e:
-    st.error(f"Connection Error: {e}")
+    st.error(f"Live Telemetry Timeout/Connection Error: {e}")
 
 if auto_refresh:
     time.sleep(refresh_interval)
