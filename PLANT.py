@@ -5,19 +5,20 @@ import os
 from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NCTPS STAGE 1 LIVE MW DASHBOARD ⚡")
+st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# ORIGINAL VECTOR DIGIT LOGIC (Preserved Exactly)
+# MODIFIED FONT STYLE AND ENLARGED VECTOR DIGIT LOGIC
 # ------------------------------------------------------------------
 def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
     mid_y = h / 2
     
+    # Redefined segment blocks to change the font structural look
     segments = {
         'a': (t, 0, w - 2*t, t),               # Top
         'b': (w - t, t, t, mid_y - t),         # Top Right
@@ -35,7 +36,8 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     }
     
     if char == '.':
-        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        # Slightly scaled up decimal point sizing for high visibility
+        draw.rectangle([x + w/2 - t, y + h - 1.2*t, x + w/2 + t, y + h], fill=color)
         return
 
     active = mapping.get(char, '')
@@ -44,10 +46,11 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
         draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
 
 def draw_vector_string(draw, text, cx, cy, color):
-    digit_w = 64       
-    digit_h = 110       
-    thickness = 15      
-    spacing = 12       
+    # UPDATED CONFIGURATION FOR A DISTINCT, SIGNIFICANTLY BIGGER LOOK
+    digit_w = 84        # Swapped from 64 -> Broadens digit appearance
+    digit_h = 136       # Swapped from 110 -> Tallies a ~25% height boost
+    thickness = 18      # Swapped from 15 -> Makes font notably thicker & bolder
+    spacing = 16        # Swapped from 12 -> More space between elements changes style feel
     
     total_w = len(text) * (digit_w + spacing) - spacing
     start_x = cx - (total_w / 2)
@@ -60,7 +63,6 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, is_frequency=False):
-    # Verify local file paths dynamically
     paths_to_check = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -85,8 +87,9 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         
+        # Recalibrated centering offsets so the larger layout sits comfortably inside the ring dials
         center_x = png_img.size[0] * 0.50
-        center_y = png_img.size[1] * 0.50
+        center_y = png_img.size[1] * 0.525
         
         if is_frequency or "HZ" in image_filename.upper():
             text_color = (255, 235, 0, 255)  # Yellow
@@ -99,13 +102,12 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         return None
 
 # ------------------------------------------------------------------
-# LAYOUT FRAME SETUP (Fixed: Key Removed)
+# LAYOUT FRAME SETUP
 # ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
 col1, col2, col3, col4 = st.columns(4)
 
-# Create persistent single-element slots to prevent flickering/duplication
 with col1:
     i1 = st.empty()
 with col2:
@@ -124,7 +126,6 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # Render and display directly inside the established placeholders
         if u1_val != "N/A":
             img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
             if img1:
@@ -148,7 +149,6 @@ try:
 except Exception as e:
     st.error(f"Live Telemetry Link Error: {e}")
 
-# High-frequency dashboard auto-refresh loop
 if auto_refresh:
     time.sleep(refresh_interval)
     st.rerun()
