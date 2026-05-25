@@ -1,86 +1,128 @@
 import streamlit as st
 import requests
 import time
+import io
 import base64
 import os
+from PIL import Image, ImageDraw
 
-st.set_page_config(page_title="NCTPS STAGE 1 LIVE MW DASHBOARD", layout="wide")
-st.title("⚡ NCTPS STAGE 1 LIVE MW DATA ⚡")
+st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
+st.title("⚡ NCTPS1MW LIVE PLANT DATA ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# SYSTEM ASSET CACHING LAYER (Loaded into memory exactly once)
+# ORIGINAL SEVEN-SEGMENT VECTOR LOGIC (Preserved Exactly)
 # ------------------------------------------------------------------
-@st.cache_resource
-def load_base64_backgrounds():
-    filenames = {
-        "u1": "Gemini_U1.jpg",
-        "u2": "Gemini_U2.jpg",
-        "u3": "Gemini_U3.jpg",
-        "hz": "HZ.jpg"
+def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
+    t = thickness
+    mid_y = h / 2
+    
+    segments = {
+        'a': (t, 0, w - 2*t, t),               # Top
+        'b': (w - t, t, t, mid_y - t),         # Top Right
+        'c': (w - t, mid_y, t, mid_y - t),     # Bottom Right
+        'd': (t, h - t, w - 2*t, t),           # Bottom
+        'e': (0, mid_y, t, mid_y - t),         # Bottom Left
+        'f': (0, t, t, mid_y - t),             # Top Left
+        'g': (t, mid_y - t/2, w - 2*t, t)      # Middle
     }
     
-    encoded_b64 = {}
-    for key, filename in filenames.items():
-        paths_to_check = [
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), filename),
-            os.path.join(os.getcwd(), filename),
-            filename
-        ]
-        
-        target_path = None
-        for p in paths_to_check:
-            if os.path.exists(p):
-                target_path = p
-                break
-                
-        b64_str = ""
-        if target_path:
-            try:
-                with open(target_path, "rb") as img_file:
-                    b64_str = base64.b64encode(img_file.read()).decode()
-            except Exception:
-                pass
-        encoded_b64[key] = b64_str
-        
-    return encoded_b64
-
-bg_images = load_base64_backgrounds()
-
-# ------------------------------------------------------------------
-# DYNAMIC FLICKER-FREE CARD RENDERER
-# ------------------------------------------------------------------
-def render_instrument_card(value, bg_key, is_frequency=False):
-    """
-    Renders the background image precisely sized inside the columns.
-    Ensures background image repeats are disabled permanently.
-    """
-    b64_data = bg_images.get(bg_key, "")
-    text_color = "#ffeb00" if is_frequency else "#00f0ff"
+    mapping = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
+        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
+        '-': 'g'
+    }
     
-    html_layout = f"""
-    <div style="position: relative; width: 100%; max-width: 400px; aspect-ratio: 400/250; 
-                margin: 0 auto; background-image: url('data:image/jpeg;base64,{b64_data}'); 
-                background-size: contain; background-repeat: no-repeat; background-position: center;
-                border-radius: 6px; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                    display: flex; justify-content: center; align-items: center; pointer-events: none;">
-            <span style="font-family: 'Courier New', Courier, monospace; font-weight: 900; 
-                         font-size: clamp(1.6rem, 4vw, 2.3rem); color: {text_color}; 
-                         letter-spacing: 1px; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0px 0px 8px rgba(0,0,0,0.8);
-                         margin-top: 10px; user-select: none;">
-                {value}
-            </span>
-        </div>
-    </div>
-    """
-    return html_layout
+    if char == '.':
+        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        return
+
+    active = mapping.get(char, '')
+    for seg in active:
+        sx, sy, sw, sh = segments[seg]
+        draw.rectangle([x + sx, y + sy, x + sx + sw, y + sy + sh], fill=color)
+
+def draw_vector_string(draw, text, cx, cy, color):
+    digit_w = 64       
+    digit_h = 110       
+    thickness = 15      
+    spacing = 12       
+    
+    total_w = len(text) * (digit_w + spacing) - spacing
+    start_x = cx - (total_w / 2)
+    start_y = cy - (digit_h / 2)
+    
+    curr_x = start_x
+    for char in text:
+        if char in '0123456789.-':
+            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
+        curr_x += digit_w + spacing
+
+def draw_digital_display(value, image_filename, is_frequency=False):
+    # Safe path resolution lookup
+    paths_to_check = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename),
+        os.path.join(os.getcwd(), image_filename),
+        image_filename
+    ]
+    
+    target_path = None
+    for p in paths_to_check:
+        if os.path.exists(p):
+            target_path = p
+            break
+            
+    if not target_path:
+        return None
+
+    try:
+        png_img = Image.open(target_path).convert("RGBA")
+        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+        solid_bg.paste(png_img, (0, 0), png_img)
+        base_img = solid_bg.convert("RGBA")
+        
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        
+        center_x = png_img.size[0] * 0.50
+        center_y = png_img.size[1] * 0.50
+        
+        if is_frequency:
+            text_color = (255, 235, 0, 255)  # Vibrant Safety Yellow
+        else:
+            text_color = (0, 240, 255, 255)  # Electric Cyan
+            
+        draw_vector_string(draw, str(value), center_x, center_y, text_color)
+        return Image.alpha_composite(base_img, overlay)
+    except Exception:
+        return None
 
 # ------------------------------------------------------------------
-# MAIN TELEMETRY LOOP
+# HIGH-SPEED FLICKERLESS BASE64 CONVERTER
+# ------------------------------------------------------------------
+def PIL_to_html_img(pil_img):
+    """
+    Converts a PIL image directly into an inline Base64 data URI string.
+    Bypasses Streamlit network image fetches entirely to stop flashing.
+    """
+    if pil_img is None:
+        return '<div style="width:100%; max-width:400px; aspect-ratio:400/250; background:#111622; border-radius:6px; margin:0 auto;"></div>'
+    
+    buffered = io.BytesIO()
+    pil_img.save(buffered, format="PNG")
+    b64_str = base64.b64encode(buffered.getvalue()).decode()
+    
+    return f"""
+    <img src="data:image/png;base64,{b64_str}" 
+         style="width: 100%; max-width: 400px; display: block; margin: 0 auto; 
+                border-radius: 6px; box-shadow: 0px 4px 10px rgba(0,0,0,0.5);">
+    """
+
+# ------------------------------------------------------------------
+# LAYOUT DISPLAY NODES
 # ------------------------------------------------------------------
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
@@ -104,20 +146,21 @@ try:
         u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
         hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
         
-        # UNIT 1 DISPLAY FRAME
-        i1.markdown(render_instrument_card(u1_val, "u1", is_frequency=False), unsafe_allow_html=True)
+        # Render clean vector digits over instruments without extra text labels
+        img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
+        i1.markdown(PIL_to_html_img(img1), unsafe_allow_html=True)
 
-        # UNIT 2 DISPLAY FRAME
-        i2.markdown(render_instrument_card(u2_val, "u2", is_frequency=False), unsafe_allow_html=True)
+        img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+        i2.markdown(PIL_to_html_img(img2), unsafe_allow_html=True)
 
-        # UNIT 3 DISPLAY FRAME
-        i3.markdown(render_instrument_card(u3_val, "u3", is_frequency=False), unsafe_allow_html=True)
+        img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+        i3.markdown(PIL_to_html_img(img3), unsafe_allow_html=True)
 
-        # GRID FREQUENCY DISPLAY FRAME
-        i4.markdown(render_instrument_card(hz_val, "hz", is_frequency=True), unsafe_allow_html=True)
+        img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+        i4.markdown(PIL_to_html_img(img4), unsafe_allow_html=True)
 
 except Exception as e:
-    st.error(f"Live Telemetry Timeout/Connection Error: {e}")
+    st.error(f"Live Plant Network Link Error: {e}")
 
 if auto_refresh:
     time.sleep(refresh_interval)
