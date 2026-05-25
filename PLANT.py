@@ -12,9 +12,8 @@ refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
 # ------------------------------------------------------------------
-# SYSTEM PATH RESOLVER (Fixes FileNotFoundError)
+# SYSTEM PATH RESOLVER
 # ------------------------------------------------------------------
-# This finds the exact absolute folder where PLANT.py resides
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_absolute_path(filename):
@@ -22,13 +21,14 @@ def get_absolute_path(filename):
     return os.path.join(SCRIPT_DIR, filename)
 
 # ------------------------------------------------------------------
-# CACHING LAYER: Loads background assets safely only ONCE
+# CACHING LAYER WITH ERROR FALLBACK
 # ------------------------------------------------------------------
 @st.cache_resource
 def load_base_template(filename):
     """
     Finds, opens, and retains background assets in system RAM.
-    This permanently eliminates disk I/O lag and image vanishing.
+    If the file does not exist, returns a dynamically generated template
+    to prevent NoneType errors.
     """
     abs_path = get_absolute_path(filename)
     try:
@@ -37,10 +37,15 @@ def load_base_template(filename):
             solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
             solid_bg.paste(png_img, (0, 0), png_img)
             return solid_bg.convert("RGBA")
-        else:
-            return None
-    except Exception as e:
-        return None
+    except Exception:
+        pass
+    
+    # Fallback Template: If file is missing or errors out, create a clean 400x250 panel in memory
+    fallback = Image.new("RGBA", (400, 250), (20, 25, 35, 255))
+    draw = ImageDraw.Draw(fallback)
+    # Draw a subtle border line to indicate a placeholder panel
+    draw.rectangle([0, 0, 399, 249], outline=(50, 60, 80, 255), width=3)
+    return fallback
 
 # ------------------------------------------------------------------
 # ORIGINAL VECTOR DIGIT CODES
@@ -91,15 +96,8 @@ def draw_vector_string(draw, text, cx, cy, color):
         curr_x += digit_w + spacing
 
 def draw_digital_display(value, image_filename, **kwargs):
-    # Fetch background safely via our path-resolved cache layer
+    # Guaranteed to return a valid PIL image canvas (either your file or a fallback block)
     base_img = load_base_template(image_filename)
-    
-    # Fallback placeholder frame if an image asset is completely missing
-    if base_img is None:
-        fallback = Image.new("RGBA", (400, 300), (30, 30, 30, 255))
-        draw = ImageDraw.Draw(fallback)
-        draw.text((10, 10), f"Missing: {image_filename}", fill=(255,0,0,255))
-        base_img = fallback
         
     try:
         # Generate text overlay layer
@@ -124,36 +122,6 @@ def draw_digital_display(value, image_filename, **kwargs):
                 
         return Image.alpha_composite(base_img, overlay)
     except Exception:
-        return None
+        return base_img
 
-url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
-
-# Permanent display layout configuration
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    m1 = st.empty()
-    i1 = st.empty()
-with col2:
-    m2 = st.empty()
-    i2 = st.empty()
-with col3:
-    m3 = st.empty()
-    i3 = st.empty()
-with col4:
-    m4 = st.empty()
-    i4 = st.empty()
-
-try:
-    response = requests.get(url)
-    if response.status_code == 200 and (nctps_data := response.json()):
-        
-        u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-        u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-        u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-        hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-        
-        # UNIT 1
-        m1.metric(label="UNIT 1 Generation", value=f"{u1_val} MW")
-        if u1_val != "N/A":
-            img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is
+url = "https://nctps1-594d5
