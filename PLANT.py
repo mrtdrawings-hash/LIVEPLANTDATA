@@ -85,11 +85,11 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # ADJUSTED: Shifted center_y from 0.515 to 0.49 to move text UP
-        center_x = base_img.size[0] * 0.50
+        # ADJUSTED: Shifted center_x from 0.50 to 0.485 to slide text slightly left
+        center_x = base_img.size[0] * 0.485
         center_y = base_img.size[1] * 0.49
 
-        # INCREASED: Font size bumped from 95 to 135 to fill the box
+        # Font size setting
         font = get_scalable_font(font_size=135)
         text_str = str(value)
         
