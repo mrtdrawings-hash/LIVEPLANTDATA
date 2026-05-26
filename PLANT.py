@@ -4,7 +4,7 @@ import os
 from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
-st.title("⚡ NORTH CHENNAI THERMAL POWER STATION 1 LIVE MW ⚡")
+st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
 
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
