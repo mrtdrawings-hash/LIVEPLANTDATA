@@ -121,8 +121,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             # Constrain values within the calibrated dial limit (0 to 750 MW)
             numeric_val = max(0.0, min(numeric_val, 750.0))
 
-            # Calibrate the angle map trajectory along the outer numeric rim scale
-            # 0 MW is at 220° (bottom-left), 750 MW is at -40° (bottom-right)
+            # Angle Mapping: 0 MW is at 220° (bottom-left), 750 MW is at -40° (bottom-right)
             start_angle = 220
             end_angle = -40
             
@@ -132,22 +131,112 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             # Outer boundary scale radius near the numbers
             outer_rim_radius = width * 0.41
             
-            # Pointer drops inward from the upper numbers, stopping well short of the center text
-            pointer_length = width * 0.14
+            # Shortened length so the marker stays entirely along the top scale rim
+            pointer_length = width * 0.08
             base_width = width * 0.016
 
-            # The base pivot point is anchored out on the top numeric scale track line
+            # Outer anchor pivot point along the outer numbers ring
             pivot_x = center_x + outer_rim_radius * math.cos(angle_rad)
             pivot_y = center_y - outer_rim_radius * math.sin(angle_rad)
 
-            # The pointer tip projects inward toward the center, acting as a clean hanging marker
+            # Pointer tip pointing inward toward the scale lines
             tip_x = center_x + (outer_rim_radius - pointer_length) * math.cos(angle_rad)
             tip_y = center_y - (outer_rim_radius - pointer_length) * math.sin(angle_rad)
 
-            # Calculate perpendicular shoulders for a sharp wedge indicator arrow
-            perp_angle_l = angle_rad + (math.pi / 2)
-            perp_angle_r = angle_rad - (math.pi / 2)
+            # Left/Right shoulder positions for a clean wedge indicator shape
+            perp_l = angle_rad + (math.pi / 2)
+            perp_r = angle_rad - (math.pi / 2)
 
-            base_l_x = pivot_x + base_width * math.cos(perp_angle_l)
-            base_l_y = pivot_y - base_width * math.sin(perp_angle_l)
-            base_r_x = pivot_x + base_width * math.cos
+            base_l_x = pivot_x + base_width * math.cos(perp_l)
+            base_l_y = pivot_y - base_width * math.sin(perp_l)
+            base_r_x = pivot_x + base_width * math.cos(perp_r)
+            base_r_y = pivot_y - base_width * math.sin(perp_r)
+
+            # Draw top hanging arrow marker (High-visibility crimson red)
+            draw.polygon(
+                [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
+                fill=(235, 40, 30, 255)
+            )
+
+            # Small base rivet on the rim track
+            cap_radius = width * 0.008
+            draw.ellipse(
+                [pivot_x - cap_radius, pivot_y - cap_radius, pivot_x + cap_radius, pivot_y + cap_radius],
+                fill=(90, 90, 90, 255)
+            )
+
+        return Image.alpha_composite(base_img, overlay)
+    except Exception as e:
+        st.error(f"Render Error on {image_filename}: {e}")
+        return None
+
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+
+# Layout framework: Configured 5 columns to track U1, U2, U3, Total, and HZ
+col1, col2, col3, col4, col5 = st.columns(5)
+slot1 = col1.empty()
+slot2 = col2.empty()
+slot3 = col3.empty()
+slot4 = col4.empty()
+slot5 = col5.empty()
+
+@st.fragment(run_every=refresh_interval if auto_refresh else None)
+def live_panel():
+    try:
+        response = requests.get(url, timeout=4)
+
+        if response.status_code == 200:
+            nctps_data = response.json() or {}
+
+            u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+            u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+            # Calculate total generation load dynamically
+            total_load = 0.0
+            valid_units = 0
+
+            for val in [u1_val, u2_val, u3_val]:
+                try:
+                    total_load += float(val)
+                    valid_units += 1
+                except ValueError:
+                    pass  # Safely ignore missing data parameters
+            
+            # Formatted to standard whole integer string to strip out .0 decimal fractions
+            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
+
+            # Render UI slots
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
+                if img1:
+                    slot1.image(img1, use_container_width=True)
+
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", display_type="mw")
+                if img2:
+                    slot2.image(img2, use_container_width=True)
+
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            # Total MW Dial Execution pointing strictly to Gemini_T.jpg
+            if total_val_str != "N/A":
+                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
+                if img_total:
+                    slot4.image(img_total, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
+                if img4:
+                    slot5.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server returned status code {response.status_code}")
+
+    except Exception as e:
+        st.error(f"Live Telemetry Link Error: {e}")
+
+live_panel()
