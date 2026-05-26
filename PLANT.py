@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 st.title("⚡ NORTH CHENNAI THERMAL POWER STATION 1 LIVE MW ⚡")
@@ -26,93 +26,33 @@ def load_base_image(image_filename):
     solid_bg.paste(png_img, (0, 0), png_img)
     return solid_bg.convert("RGBA")
 
-# ------------------------------------------------------------------
-# PREMIUM INDUSTRIAL GEOMETRIC SEGMENT ENGINE (CHAMFERED STYLE)
-# ------------------------------------------------------------------
-def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
-    t = thickness
-    mid_y = h / 2
-
-    if char == '.':
-        # Centered decimal dot based on character segment width
-        draw.rectangle([x + w/2 - t/2, y + h - t, x + w/2 + t/2, y + h], fill=color)
-        return
-
-    mapping = {
-        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'fgbc',
-        '5': 'afgcd', '6': 'afedcg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
-        '-': 'g'
-    }
-
-    active = mapping.get(char, '')
+def get_custom_font(font_size=110):
+    """
+    Attempts to load a custom TrueType font file. 
+    Falls back gracefully to system defaults if not found.
+    """
+    # CONFIGURATION: Change 'digital-7.ttf' to your desired font filename
+    font_filename = "digital-7.ttf" 
     
-    # Top Segment (a) - Chamfered Ends
-    if 'a' in active:
-        draw.polygon([
-            (x + t, y), (x + w - t, y), 
-            (x + w - 1.5*t, y + t), (x + 1.5*t, y + t)
-        ], fill=color)
-        
-    # Top Left Segment (f)
-    if 'f' in active:
-        draw.polygon([
-            (x, y + t), (x + t, y + 1.5*t), 
-            (x + t, y + mid_y - t/2), (x, y + mid_y)
-        ], fill=color)
-        
-    # Top Right Segment (b)
-    if 'b' in active:
-        draw.polygon([
-            (x + w - t, y + 1.5*t), (x + w, y + t), 
-            (x + w, y + mid_y), (x + w - t, y + mid_y - t/2)
-        ], fill=color)
-        
-    # Middle Segment (g) - Pointed Ends
-    if 'g' in active:
-        draw.polygon([
-            (x + 1.2*t, y + mid_y), (x + 2*t, y + mid_y - t/2), 
-            (x + w - 2*t, y + mid_y - t/2), (x + w - 1.2*t, y + mid_y),
-            (x + w - 2*t, y + mid_y + t/2), (x + 2*t, y + mid_y + t/2)
-        ], fill=color)
-        
-    # Bottom Left Segment (e)
-    if 'e' in active:
-        draw.polygon([
-            (x, y + mid_y), (x + t, y + mid_y + t/2), 
-            (x + t, y + h - 1.5*t), (x, y + h - t)
-        ], fill=color)
-        
-    # Bottom Right Segment (c)
-    if 'c' in active:
-        draw.polygon([
-            (x + w - t, y + mid_y + t/2), (x + w, y + mid_y), 
-            (x + w, y + h - t), (x + w - t, y + h - 1.5*t)
-        ], fill=color)
-        
-    # Bottom Segment (d) - Chamfered Ends
-    if 'd' in active:
-        draw.polygon([
-            (x + 1.5*t, y + h - t), (x + w - 1.5*t, y + h - t), 
-            (x + w - t, y + h), (x + t, y + h)
-        ], fill=color)
-
-def draw_vector_string(draw, text, cx, cy, color):
-    # PRESERVED SIZES WITH BALANCED SPACING ALIGNMENT
-    digit_w = 80
-    digit_h = 138
-    thickness = 18
-    spacing = 14
-
-    # Calculate exact bounding size to dynamically snap text dead-center
-    total_w = (len(text) * digit_w) + ((len(text) - 1) * spacing)
-    start_x = cx - (total_w / 2)
-    start_y = cy - (digit_h / 2)
-
-    curr_x = start_x
-    for char in text:
-        if char in '0123456789.-':
-            draw_custom_vector_digit(draw, curr_x, start_y, char, digit_w, digit_h, thickness, color)
-        curr_x += digit_w + spacing
+    paths_to_check = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), font_filename),
+        os.path.join(os.getcwd(), font_filename),
+        font_filename
+    ]
+    
+    font_path = next((p for p in paths_to_check if os.path.exists(p)), None)
+    
+    if font_path:
+        try:
+            return ImageFont.truetype(font_path, font_size)
+        except Exception:
+            pass
+            
+    # Fallback cascade if custom font file is missing
+    try:
+        return ImageFont.truetype("arialbd.ttf", font_size) # Arial Bold
+    except Exception:
+        return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, is_frequency=False):
     base_img = load_base_image(image_filename)
@@ -123,20 +63,34 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # ADJUSTED ANCHOR POINTS FOR PERFECT CENTER IN BACKDROP FRAME
-        center_x = base_img.size[0] * 0.495
-        center_y = base_img.size[1] * 0.505
+        # Dynamic center anchors relative to your background dimensions
+        center_x = base_img.size[0] * 0.50
+        center_y = base_img.size[1] * 0.515
 
+        # Font configuration
+        font = get_custom_font(font_size=105)
+        text_str = str(value)
+        
+        # Color profile
         text_color = (255, 235, 0, 255) if (is_frequency or "HZ" in image_filename.upper()) else (0, 240, 255, 255)
 
-        draw_vector_string(draw, str(value), center_x, center_y, text_color)
+        # Compute accurate bounding box calculation using modern Pillow methods
+        bbox = draw.textbbox((0, 0), text_str, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        # Snap text coordinates exactly to center layout
+        x = center_x - (text_w / 2)
+        y = center_y - (text_h / 2) - (bbox[1]) # Offset correction for font ascent
+
+        draw.text((x, y), text_str, fill=text_color, font=font)
         return Image.alpha_composite(base_img, overlay)
-    except Exception:
+    except Exception as e:
+        st.error(f"Render Error: {e}")
         return None
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Static layout system stays out of the fragment refresh
 col1, col2, col3, col4 = st.columns(4)
 slot1 = col1.empty()
 slot2 = col2.empty()
