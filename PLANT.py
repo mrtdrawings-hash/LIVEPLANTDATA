@@ -75,8 +75,8 @@ def get_scalable_font(font_size=135):
 
 def draw_digital_display(value, image_filename, display_type="mw"):
     """
-    Renders text centered over the panel face and handles an overhead 
-    rim-mounted sweeping pointer exclusively for the Total MW dial.
+    Renders text centered over the panel face and handles a precisely calibrated
+    overhead rim-mounted sweeping pointer exclusively for the Total MW dial.
     """
     base_img = load_base_image(image_filename)
     if base_img is None:
@@ -111,39 +111,50 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         y = center_y - (text_h / 2) - bbox[1]
         draw.text((x, y), text_str, fill=text_color, font=font)
 
-        # --- OVERHEAD POINTER LOGIC FOR TOTAL MW DIAL ---
+        # --- EXCLUSIVE CALIBRATED OVERHEAD POINTER LOGIC FOR TOTAL MW DIAL ---
         if display_type == "total":
             try:
                 numeric_val = float(value)
             except ValueError:
                 numeric_val = 0.0
 
-            # Constrain values within the calibrated dial limit (0 to 750 MW)
+            # Limit values within the dial scope (0 to 750 MW)
             numeric_val = max(0.0, min(numeric_val, 750.0))
 
-            # Angle Mapping: 0 MW is at 220° (bottom-left), 750 MW is at -40° (bottom-right)
-            start_angle = 220
-            end_angle = -40
+            # Non-linear breakpoint mapping arrays for explicit tick matching
+            mw_breakpoints = [0, 75, 150, 225, 300, 375, 450, 525, 600, 675, 750]
+            angle_breakpoints = [223, 193, 163, 131, 99, 66, 34, 2, -30, -62, -93]
+
+            # Find the segment the current MW reading falls into
+            angle_deg = angle_breakpoints[0]
+            for i in range(len(mw_breakpoints) - 1):
+                if mw_breakpoints[i] <= numeric_val <= mw_breakpoints[i+1]:
+                    # Linear interpolation within this specific segment
+                    mw_start = mw_breakpoints[i]
+                    mw_end = mw_breakpoints[i+1]
+                    ang_start = angle_breakpoints[i]
+                    ang_end = angle_breakpoints[i+1]
+                    
+                    fraction = (numeric_val - mw_start) / (mw_end - mw_start)
+                    angle_deg = ang_start + fraction * (ang_end - ang_start)
+                    break
             
-            angle_deg = start_angle + (numeric_val - 0) * (end_angle - start_angle) / (750 - 0)
             angle_rad = math.radians(angle_deg)
 
-            # Outer boundary scale radius near the numbers
-            outer_rim_radius = width * 0.41
-            
-            # Shortened length so the marker stays entirely along the top scale rim
-            pointer_length = width * 0.08
+            # Outer track baseline radius alignment configuration
+            outer_rim_radius = width * 0.415
+            pointer_length = width * 0.085
             base_width = width * 0.016
 
-            # Outer anchor pivot point along the outer numbers ring
+            # Outer anchor base point
             pivot_x = center_x + outer_rim_radius * math.cos(angle_rad)
             pivot_y = center_y - outer_rim_radius * math.sin(angle_rad)
 
-            # Pointer tip pointing inward toward the scale lines
+            # Inward pointing arrow tip marker coord calculations
             tip_x = center_x + (outer_rim_radius - pointer_length) * math.cos(angle_rad)
             tip_y = center_y - (outer_rim_radius - pointer_length) * math.sin(angle_rad)
 
-            # Left/Right shoulder positions for a clean wedge indicator shape
+            # Wedge geometry construction variables
             perp_l = angle_rad + (math.pi / 2)
             perp_r = angle_rad - (math.pi / 2)
 
@@ -158,7 +169,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
                 fill=(235, 40, 30, 255)
             )
 
-            # Small base rivet on the rim track
+            # Clean micro-rivet base cap on the track line
             cap_radius = width * 0.008
             draw.ellipse(
                 [pivot_x - cap_radius, pivot_y - cap_radius, pivot_x + cap_radius, pivot_y + cap_radius],
@@ -219,24 +230,4 @@ def live_panel():
                     slot2.image(img2, use_container_width=True)
 
             if u3_val != "N/A":
-                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
-                if img3:
-                    slot3.image(img3, use_container_width=True)
-
-            # Total MW Dial Execution pointing strictly to Gemini_T.jpg
-            if total_val_str != "N/A":
-                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
-                if img_total:
-                    slot4.image(img_total, use_container_width=True)
-
-            if hz_val != "N/A":
-                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
-                if img4:
-                    slot5.image(img4, use_container_width=True)
-        else:
-            st.error(f"Server returned status code {response.status_code}")
-
-    except Exception as e:
-        st.error(f"Live Telemetry Link Error: {e}")
-
-live_panel()
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="
