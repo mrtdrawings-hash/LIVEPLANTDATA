@@ -94,11 +94,11 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         
         # Color profile routing
         if display_type == "hz":
-            text_color = (255, 235, 0, 255) # Warning Yellow
+            text_color = (255, 235, 0, 255)  # Warning Yellow
         elif display_type == "total":
-            text_color = (0, 255, 127, 255) # High-visibility Spring Green for Total Load
+            text_color = (0, 0, 0, 255)      # UPDATED: Crisp Solid Black for Total MW white face
         else:
-            text_color = (0, 240, 255, 255) # Standard Cyan
+            text_color = (0, 240, 255, 255)  # Standard Cyan
 
         # Calculate bounding dimensions 
         bbox = draw.textbbox((0, 0), text_str, font=font)
