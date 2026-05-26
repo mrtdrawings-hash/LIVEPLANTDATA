@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import math
 from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
@@ -74,20 +75,21 @@ def get_scalable_font(font_size=135):
 
 def draw_digital_display(value, image_filename, display_type="mw"):
     """
-    Renders text cleanly centered over the blank square on the dial panel face.
-    display_type options: 'mw', 'hz', 'total'
+    Renders text centered over the panel face and handles an 
+    analog sweeping pointer exclusively for the Total MW dial.
     """
     base_img = load_base_image(image_filename)
     if base_img is None:
         return None
 
     try:
+        width, height = base_img.size
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # Center layout positioning
-        center_x = base_img.size[0] * 0.485
-        center_y = base_img.size[1] * 0.49
+        # Center positioning for text and needle pivot axis
+        center_x = width * 0.485
+        center_y = height * 0.49
 
         font = get_scalable_font(font_size=135)
         text_str = str(value)
@@ -96,19 +98,74 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         if display_type == "hz":
             text_color = (255, 235, 0, 255)  # Warning Yellow
         elif display_type == "total":
-            text_color = (0, 0, 0, 255)      # UPDATED: Crisp Solid Black for Total MW white face
+            text_color = (0, 0, 0, 255)      # Crisp Solid Black
         else:
             text_color = (0, 240, 255, 255)  # Standard Cyan
 
-        # Calculate bounding dimensions 
+        # Calculate text bounding dimensions and draw string
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
 
         x = center_x - (text_w / 2)
         y = center_y - (text_h / 2) - bbox[1]
-
         draw.text((x, y), text_str, fill=text_color, font=font)
+
+        # --- EXCLUSIVE POINTER LOGIC FOR TOTAL MW DIAL ---
+        if display_type == "total":
+            try:
+                numeric_val = float(value)
+            except ValueError:
+                numeric_val = 0.0
+
+            # Constrain the value to the dial face limits (0 to 750 MW)
+            numeric_val = max(0.0, min(numeric_val, 750.0))
+
+            # Angle Mapping: 0 MW is at 220° (left), 750 MW is at -40° (right)
+            start_angle = 220
+            end_angle = -40
+            
+            # Linear interpolation formula to map MW to degrees
+            angle_deg = start_angle + (numeric_val - 0) * (end_angle - start_angle) / (750 - 0)
+            angle_rad = math.radians(angle_deg)
+
+            # Pointer geometry configurations (scaled proportionally)
+            pointer_length = width * 0.38
+            cap_radius = width * 0.04
+            base_width = width * 0.015
+
+            # Calculate precise needle tip point coordinates
+            tip_x = center_x + pointer_length * math.cos(angle_rad)
+            tip_y = center_y - pointer_length * math.sin(angle_rad)
+
+            # Calculate tapered base shoulder points for a sleek triangle needle
+            base_angle_left = angle_rad + (math.pi / 2)
+            base_angle_right = angle_rad - (math.pi / 2)
+
+            base_l_x = center_x + base_width * math.cos(base_angle_left)
+            base_l_y = center_y - base_width * math.sin(base_angle_left)
+            base_r_x = center_x + base_width * math.cos(base_angle_right)
+            base_r_y = center_y - base_width * math.sin(base_angle_right)
+
+            # Draw needle body (High contrast bold red)
+            draw.polygon(
+                [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
+                fill=(235, 40, 30, 255)
+            )
+
+            # Draw dimensional metallic multi-layered hub center cap
+            draw.ellipse(
+                [center_x - cap_radius, center_y - cap_radius, center_x + cap_radius, center_y + cap_radius],
+                fill=(45, 45, 45, 255),
+                outline=(120, 120, 120, 255),
+                width=2
+            )
+            inner_radius = cap_radius * 0.4
+            draw.ellipse(
+                [center_x - inner_radius, center_y - inner_radius, center_x + inner_radius, center_y + inner_radius],
+                fill=(200, 200, 200, 255)
+            )
+
         return Image.alpha_composite(base_img, overlay)
     except Exception as e:
         st.error(f"Render Error on {image_filename}: {e}")
@@ -134,53 +191,4 @@ def live_panel():
 
             u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
             u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-
-            # Calculate total generation load dynamically
-            total_load = 0.0
-            valid_units = 0
-
-            for val in [u1_val, u2_val, u3_val]:
-                try:
-                    total_load += float(val)
-                    valid_units += 1
-                except ValueError:
-                    pass # Ignore strings/N/A parameters dynamically
-            
-            # Formatted to standard whole integer string to strip out .0 decimal fractions
-            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
-
-            # Render UI slots
-            if u1_val != "N/A":
-                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
-                if img1:
-                    slot1.image(img1, use_container_width=True)
-
-            if u2_val != "N/A":
-                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", display_type="mw")
-                if img2:
-                    slot2.image(img2, use_container_width=True)
-
-            if u3_val != "N/A":
-                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
-                if img3:
-                    slot3.image(img3, use_container_width=True)
-
-            # Total MW Dial Execution pointing strictly to Gemini_T.jpg
-            if total_val_str != "N/A":
-                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
-                if img_total:
-                    slot4.image(img_total, use_container_width=True)
-
-            if hz_val != "N/A":
-                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
-                if img4:
-                    slot5.image(img4, use_container_width=True)
-        else:
-            st.error(f"Server returned status code {response.status_code}")
-
-    except Exception as e:
-        st.error(f"Live Telemetry Link Error: {e}")
-
-live_panel()
+            u3_val = str(nctps_data.get("UNIT3", {}).
