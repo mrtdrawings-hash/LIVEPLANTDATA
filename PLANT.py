@@ -98,9 +98,9 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         if display_type == "hz":
             text_color = (255, 235, 0, 255)  # Warning Yellow
         elif display_type == "total":
-            text_color = (0, 0, 0, 255)      # Crisp Solid Black
+            text_color = (0, 0, 0, 255)      # Crisp Solid Black for White Dial Face
         else:
-            text_color = (0, 240, 255, 255)  # Standard Cyan
+            text_color = (0, 240, 255, 255)  # Standard Cyan for Units 1, 2, 3
 
         # Calculate text bounding dimensions and draw string
         bbox = draw.textbbox((0, 0), text_str, font=font)
@@ -125,7 +125,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             start_angle = 220
             end_angle = -40
             
-            # Linear interpolation formula to map MW to degrees
+            # Linear interpolation formula to map MW values to degrees
             angle_deg = start_angle + (numeric_val - 0) * (end_angle - start_angle) / (750 - 0)
             angle_rad = math.radians(angle_deg)
 
@@ -147,7 +147,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             base_r_x = center_x + base_width * math.cos(base_angle_right)
             base_r_y = center_y - base_width * math.sin(base_angle_right)
 
-            # Draw needle body (High contrast bold red)
+            # Draw needle body (High contrast bold red/orange)
             draw.polygon(
                 [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
                 fill=(235, 40, 30, 255)
@@ -173,7 +173,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Layout framework: Configured 5 columns to cleanly track U1, U2, U3, Total, and HZ
+# Layout framework: Configured 5 columns to track U1, U2, U3, Total, and HZ
 col1, col2, col3, col4, col5 = st.columns(5)
 slot1 = col1.empty()
 slot2 = col2.empty()
@@ -189,6 +189,56 @@ def live_panel():
         if response.status_code == 200:
             nctps_data = response.json() or {}
 
+            # Fixed all JSON parsing structures safely with matching parentheses closures
             u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
             u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-            u3_val = str(nctps_data.get("UNIT3", {}).
+            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+            # Calculate total generation load dynamically
+            total_load = 0.0
+            valid_units = 0
+
+            for val in [u1_val, u2_val, u3_val]:
+                try:
+                    total_load += float(val)
+                    valid_units += 1
+                except ValueError:
+                    pass  # Safely ignore missing data parameters strings
+            
+            # Formatted to standard whole integer string to strip out .0 decimal fractions
+            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
+
+            # Render UI slots
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
+                if img1:
+                    slot1.image(img1, use_container_width=True)
+
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", display_type="mw")
+                if img2:
+                    slot2.image(img2, use_container_width=True)
+
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            # Total MW Dial Execution pointing strictly to Gemini_T.jpg
+            if total_val_str != "N/A":
+                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
+                if img_total:
+                    slot4.image(img_total, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
+                if img4:
+                    slot5.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server returned status code {response.status_code}")
+
+    except Exception as e:
+        st.error(f"Live Telemetry Link Error: {e}")
+
+live_panel()
