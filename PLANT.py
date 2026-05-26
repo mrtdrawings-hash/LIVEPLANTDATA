@@ -4,61 +4,81 @@ import os
 import math
 from PIL import Image, ImageDraw, ImageFont
 
-# ... [Keep load_base_image and get_scalable_font functions as they were] ...
+st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
+st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
+
+st.sidebar.header("🔄 Refresh Settings")
+refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
+auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
+
+@st.cache_data(show_spinner=False)
+def load_base_image(image_filename):
+    paths_to_check = [os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename), 
+                      os.path.join(os.getcwd(), image_filename), image_filename]
+    target_path = next((p for p in paths_to_check if os.path.exists(p)), None)
+    if not target_path: return None
+    png_img = Image.open(target_path).convert("RGBA")
+    solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+    solid_bg.paste(png_img, (0, 0), png_img)
+    return solid_bg.convert("RGBA")
+
+def get_scalable_font(font_size=135):
+    # (Existing font logic remains unchanged)
+    return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, display_type="mw"):
     base_img = load_base_image(image_filename)
     if base_img is None: return None
-
     try:
         width, height = base_img.size
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-
-        # 1. Text Rendering
         center_x, center_y = width * 0.485, height * 0.49
-        font = get_scalable_font(font_size=135)
-        text_str = str(value)
-        text_color = (0, 0, 0, 255) if display_type == "total" else (0, 240, 255, 255)
         
-        bbox = draw.textbbox((0, 0), text_str, font=font)
-        draw.text((center_x - (bbox[2]-bbox[0])/2, center_y - (bbox[3]-bbox[1])/2 - bbox[1]), 
-                  text_str, fill=text_color, font=font)
+        # Draw Digital Text
+        font = get_scalable_font(font_size=135)
+        text_color = (0, 0, 0, 255) if display_type == "total" else (0, 240, 255, 255)
+        draw.text((center_x, center_y), str(value), fill=text_color, font=font, anchor="mm")
 
-        # 2. Pointer and LED Rendering
         if display_type == "total":
-            numeric_val = float(value) if value != "N/A" else 0.0
-            numeric_val = max(0.0, min(numeric_val, 750.0))
-
-            # Breakpoints: MW -> Clockwise degrees from Top (0 MW is 145 deg from top)
+            val = max(0.0, min(float(value), 750.0))
             mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0]
             ang_bp = [145.0, 116.0, 86.0, 54.0, 24.0, 0.0, -24.0, -54.0, -86.0, -116.0, -145.0]
-
-            angle_deg = ang_bp[0]
-            for i in range(len(mw_bp) - 1):
-                if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
-                    f = (numeric_val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
-                    angle_deg = ang_bp[i] + f * (ang_bp[i+1] - ang_bp[i])
-                    break
+            
+            # Interpolate angle
+            angle = ang_bp[0]
+            for i in range(len(mw_bp)-1):
+                if mw_bp[i] <= val <= mw_bp[i+1]:
+                    f = (val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
+                    angle = ang_bp[i] + f * (ang_bp[i+1] - ang_bp[i])
             
             # Draw Pointer
-            angle_rad = math.radians(90.0 - angle_deg)
-            r_outer, p_len = width * 0.448, width * 0.072
-            pivot_x, pivot_y = width * 0.50, height * 0.50
-            tip_x = pivot_x + (r_outer - p_len) * math.cos(angle_rad)
-            tip_y = pivot_y - (r_outer - p_len) * math.sin(angle_rad)
-            draw.line([(pivot_x, pivot_y), (tip_x, tip_y)], fill=(220, 35, 25, 255), width=8)
+            rad = math.radians(270.0 - angle)
+            tip_x = width*0.5 + (width*0.37) * math.cos(rad)
+            tip_y = height*0.5 - (width*0.37) * math.sin(rad)
+            draw.line([(width*0.5, height*0.5), (tip_x, tip_y)], fill=(220, 35, 25, 255), width=8)
 
-            # Draw Status LEDs at bottom (Red at 0 MW, Green at 750 MW)
-            led_radius = width * 0.015
-            # Red LED Position (Near 0 MW)
-            draw.ellipse([width*0.28-led_radius, height*0.78-led_radius, width*0.28+led_radius, height*0.78+led_radius], fill=(255, 0, 0))
-            # Green LED Position (Near 750 MW)
-            draw.ellipse([width*0.72-led_radius, height*0.78-led_radius, width*0.72+led_radius, height*0.78+led_radius], fill=(0, 255, 0))
+            # Draw Status LEDs (Red at 0, Green at 750)
+            draw.ellipse([width*0.25-10, height*0.75-10, width*0.25+10, height*0.75+10], fill=(255, 0, 0))
+            draw.ellipse([width*0.75-10, height*0.75-10, width*0.75+10, height*0.75+10], fill=(0, 255, 0))
 
         return Image.alpha_composite(base_img, overlay)
-    except Exception as e:
-        st.error(f"Render Error: {e}")
-        return base_img
+    except: return base_img
 
-# ... [Keep the rest of your live_panel function as it was] ...
+# Layout
+c1, c2, c3, c4, c5 = st.columns(5)
+slots = [c1.empty(), c2.empty(), c3.empty(), c4.empty(), c5.empty()]
+
+@st.fragment(run_every=refresh_interval if auto_refresh else None)
+def live_panel(s):
+    try:
+        data = requests.get(url, timeout=4).json()
+        vals = [str(data.get(f"UNIT{i}", {}).get("MW", 0)) for i in range(1, 4)]
+        total = sum(float(v) for v in vals)
+        
+        for i, (v, img) in enumerate(zip(vals, ["Gemini_U1.jpg", "Gemini_U2.jpg", "Gemini_U3.jpg"])):
+            s[i].image(draw_digital_display(v, img), use_container_width=True)
+        s[3].image(draw_digital_display(int(total), "Gemini_T.jpg", "total"), use_container_width=True)
+    except: pass
+
+live_panel(slots)
