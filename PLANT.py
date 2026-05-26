@@ -26,7 +26,7 @@ def load_base_image(image_filename):
     solid_bg.paste(png_img, (0, 0), png_img)
     return solid_bg.convert("RGBA")
 
-def get_scalable_font(font_size=100):
+def get_scalable_font(font_size=135):
     """
     Safely loads a clean, scalable font across both local machines and 
     Linux-based web servers (like Streamlit Cloud).
@@ -85,12 +85,12 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # Dynamic center coordinates relative to background size
+        # ADJUSTED: Shifted center_y from 0.515 to 0.49 to move text UP
         center_x = base_img.size[0] * 0.50
-        center_y = base_img.size[1] * 0.515
+        center_y = base_img.size[1] * 0.49
 
-        # Font configuration
-        font = get_scalable_font(font_size=95)
+        # INCREASED: Font size bumped from 95 to 135 to fill the box
+        font = get_scalable_font(font_size=135)
         text_str = str(value)
         
         # Color profiling
