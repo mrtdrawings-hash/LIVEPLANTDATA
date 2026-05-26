@@ -57,11 +57,7 @@ def get_scalable_font(font_size=135):
             except Exception:
                 pass
 
-    windows_paths = [
-        "arialbd.ttf",       
-        "trebucbd.ttf",     
-        "consola.ttf"       
-    ]
+    windows_paths = ["arialbd.ttf", "trebucbd.ttf", "consola.ttf"]
     for font_name in windows_paths:
         try:
             return ImageFont.truetype(font_name, font_size)
@@ -75,8 +71,8 @@ def get_scalable_font(font_size=135):
 
 def draw_digital_display(value, image_filename, display_type="mw"):
     """
-    Renders text centered over the panel face and handles a precisely calibrated
-    overhead rim-mounted sweeping pointer exclusively for the Total MW dial.
+    Renders text centered over the panel face and handles an overhead 
+    rim-mounted sweeping pointer exclusively for the Total MW dial.
     """
     base_img = load_base_image(image_filename)
     if base_img is None:
@@ -98,7 +94,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         if display_type == "hz":
             text_color = (255, 235, 0, 255)  # Warning Yellow
         elif display_type == "total":
-            text_color = (0, 0, 0, 255)      # Crisp Solid Black for White Dial Face
+            text_color = (0, 0, 0, 255)      # Crisp Black for White Face Dial
         else:
             text_color = (0, 240, 255, 255)  # Standard Cyan for Units 1, 2, 3
 
@@ -111,50 +107,41 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         y = center_y - (text_h / 2) - bbox[1]
         draw.text((x, y), text_str, fill=text_color, font=font)
 
-        # --- EXCLUSIVE CALIBRATED OVERHEAD POINTER LOGIC FOR TOTAL MW DIAL ---
+        # --- PIECEWISE CALIBRATED OVERHEAD POINTER FOR TOTAL LOAD DIAL ---
         if display_type == "total":
             try:
                 numeric_val = float(value)
             except ValueError:
                 numeric_val = 0.0
 
-            # Limit values within the dial scope (0 to 750 MW)
             numeric_val = max(0.0, min(numeric_val, 750.0))
 
-            # Non-linear breakpoint mapping arrays for explicit tick matching
-            mw_breakpoints = [0, 75, 150, 225, 300, 375, 450, 525, 600, 675, 750]
-            angle_breakpoints = [223, 193, 163, 131, 99, 66, 34, 2, -30, -62, -93]
+            # Non-linear breakpoint mapping arrays for explicit tick alignment
+            mw_bp = [0, 75, 150, 225, 300, 375, 450, 525, 600, 675, 750]
+            ang_bp = [223, 193, 163, 131, 99, 66, 34, 2, -30, -62, -93]
 
-            # Find the segment the current MW reading falls into
-            angle_deg = angle_breakpoints[0]
-            for i in range(len(mw_breakpoints) - 1):
-                if mw_breakpoints[i] <= numeric_val <= mw_breakpoints[i+1]:
-                    # Linear interpolation within this specific segment
-                    mw_start = mw_breakpoints[i]
-                    mw_end = mw_breakpoints[i+1]
-                    ang_start = angle_breakpoints[i]
-                    ang_end = angle_breakpoints[i+1]
-                    
-                    fraction = (numeric_val - mw_start) / (mw_end - mw_start)
-                    angle_deg = ang_start + fraction * (ang_end - ang_start)
+            angle_deg = ang_bp[0]
+            for i in range(len(mw_bp) - 1):
+                if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
+                    fraction = (numeric_val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
+                    angle_deg = ang_bp[i] + fraction * (ang_bp[i+1] - ang_bp[i])
                     break
             
             angle_rad = math.radians(angle_deg)
 
-            # Outer track baseline radius alignment configuration
+            # Dimensions optimized to sit clean along the outer track rim
             outer_rim_radius = width * 0.415
             pointer_length = width * 0.085
             base_width = width * 0.016
 
-            # Outer anchor base point
-            pivot_x = center_x + outer_rim_radius * math.cos(angle_rad)
-            pivot_y = center_y - outer_rim_radius * math.sin(angle_rad)
+            # Trigonometric pointer vector coordinates
+            cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+            pivot_x = center_x + outer_rim_radius * cos_a
+            pivot_y = center_y - outer_rim_radius * sin_a
 
-            # Inward pointing arrow tip marker coord calculations
-            tip_x = center_x + (outer_rim_radius - pointer_length) * math.cos(angle_rad)
-            tip_y = center_y - (outer_rim_radius - pointer_length) * math.sin(angle_rad)
+            tip_x = center_x + (outer_rim_radius - pointer_length) * cos_a
+            tip_y = center_y - (outer_rim_radius - pointer_length) * sin_a
 
-            # Wedge geometry construction variables
             perp_l = angle_rad + (math.pi / 2)
             perp_r = angle_rad - (math.pi / 2)
 
@@ -163,16 +150,16 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             base_r_x = pivot_x + base_width * math.cos(perp_r)
             base_r_y = pivot_y - base_width * math.sin(perp_r)
 
-            # Draw top hanging arrow marker (High-visibility crimson red)
+            # Draw high-visibility crimson red arrow wedge
             draw.polygon(
                 [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
                 fill=(235, 40, 30, 255)
             )
 
-            # Clean micro-rivet base cap on the track line
-            cap_radius = width * 0.008
+            # Base rim rivet anchor point
+            cap_r = width * 0.008
             draw.ellipse(
-                [pivot_x - cap_radius, pivot_y - cap_radius, pivot_x + cap_radius, pivot_y + cap_radius],
+                [pivot_x - cap_r, pivot_y - cap_r, pivot_x + cap_r, pivot_y + cap_r],
                 fill=(90, 90, 90, 255)
             )
 
@@ -183,7 +170,6 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Layout framework: Configured 5 columns to track U1, U2, U3, Total, and HZ
 col1, col2, col3, col4, col5 = st.columns(5)
 slot1 = col1.empty()
 slot2 = col2.empty()
@@ -195,7 +181,6 @@ slot5 = col5.empty()
 def live_panel():
     try:
         response = requests.get(url, timeout=4)
-
         if response.status_code == 200:
             nctps_data = response.json() or {}
 
@@ -204,21 +189,17 @@ def live_panel():
             u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
             hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
 
-            # Calculate total generation load dynamically
             total_load = 0.0
             valid_units = 0
-
             for val in [u1_val, u2_val, u3_val]:
                 try:
                     total_load += float(val)
                     valid_units += 1
                 except ValueError:
-                    pass  # Safely ignore missing data parameters
+                    pass
             
-            # Formatted to standard whole integer string to strip out .0 decimal fractions
             total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
 
-            # Render UI slots
             if u1_val != "N/A":
                 img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
                 if img1:
@@ -230,4 +211,22 @@ def live_panel():
                     slot2.image(img2, use_container_width=True)
 
             if u3_val != "N/A":
-                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            if total_val_str != "N/A":
+                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
+                if img_total:
+                    slot4.image(img_total, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
+                if img4:
+                    slot5.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server error: {response.status_code}")
+    except Exception as e:
+        st.error(f"Telemetry Link Error: {e}")
+
+live_panel()
