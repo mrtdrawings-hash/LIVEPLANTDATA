@@ -33,9 +33,9 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
     t = thickness
     mid_y = h / 2
 
-    # Redefining standard blocks into sleek polygons with 45-degree cut joints
     if char == '.':
-        draw.rectangle([x + w/2 - t, y + h - 1.5*t, x + w/2 + t, y + h], fill=color)
+        # Centered decimal dot based on character segment width
+        draw.rectangle([x + w/2 - t/2, y + h - t, x + w/2 + t/2, y + h], fill=color)
         return
 
     mapping = {
@@ -97,13 +97,14 @@ def draw_custom_vector_digit(draw, x, y, char, w, h, thickness, color):
         ], fill=color)
 
 def draw_vector_string(draw, text, cx, cy, color):
-    # PRESERVED YOUR EXACT CHOSEN LARGE SIZES
+    # PRESERVED SIZES WITH BALANCED SPACING ALIGNMENT
     digit_w = 80
     digit_h = 138
     thickness = 18
     spacing = 14
 
-    total_w = len(text) * (digit_w + spacing) - spacing
+    # Calculate exact bounding size to dynamically snap text dead-center
+    total_w = (len(text) * digit_w) + ((len(text) - 1) * spacing)
     start_x = cx - (total_w / 2)
     start_y = cy - (digit_h / 2)
 
@@ -122,8 +123,9 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        center_x = base_img.size[0] * 0.50
-        center_y = base_img.size[1] * 0.52
+        # ADJUSTED ANCHOR POINTS FOR PERFECT CENTER IN BACKDROP FRAME
+        center_x = base_img.size[0] * 0.495
+        center_y = base_img.size[1] * 0.505
 
         text_color = (255, 235, 0, 255) if (is_frequency or "HZ" in image_filename.upper()) else (0, 240, 255, 255)
 
