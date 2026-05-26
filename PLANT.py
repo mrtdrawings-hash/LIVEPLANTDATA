@@ -116,7 +116,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
 url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
-# Layout expansion: Configured 5 columns to cleanly track U1, U2, U3, Total, and HZ
+# Layout framework: Configured 5 columns to cleanly track U1, U2, U3, Total, and HZ
 col1, col2, col3, col4, col5 = st.columns(5)
 slot1 = col1.empty()
 slot2 = col2.empty()
@@ -148,7 +148,8 @@ def live_panel():
                 except ValueError:
                     pass # Ignore strings/N/A parameters dynamically
             
-            total_val_str = f"{total_load:.1f}" if valid_units > 0 else "N/A"
+            # Formatted to standard whole integer string to strip out .0 decimal fractions
+            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
 
             # Render UI slots
             if u1_val != "N/A":
@@ -166,7 +167,7 @@ def live_panel():
                 if img3:
                     slot3.image(img3, use_container_width=True)
 
-            # Total MW Dial Execution
+            # Total MW Dial Execution pointing strictly to Gemini_T.jpg
             if total_val_str != "N/A":
                 img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
                 if img_total:
