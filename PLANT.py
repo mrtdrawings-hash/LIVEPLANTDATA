@@ -31,7 +31,7 @@ def get_scalable_font(font_size=100):
     Safely loads a clean, scalable font across both local machines and 
     Linux-based web servers (like Streamlit Cloud).
     """
-    # 1. Look for a custom digital font if you have uploaded one to your GitHub repository
+    # 1. Look for a custom digital font if you uploaded one to your repository
     custom_font_name = "digital-7.ttf"
     paths_to_check = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), custom_font_name),
@@ -45,7 +45,7 @@ def get_scalable_font(font_size=100):
         except Exception:
             pass
 
-    # 2. Linux server standard fallback paths (Streamlit Cloud runs on Linux)
+    # 2. Linux server standard fallback paths (Streamlit Cloud environment)
     linux_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -62,7 +62,7 @@ def get_scalable_font(font_size=100):
     windows_paths = [
         "arialbd.ttf",       # Arial Bold
         "trebucbd.ttf",     # Trebuchet MS Bold
-        "consola.ttf"       # Consolas (Monospace - looks great on dashboards!)
+        "consola.ttf"       # Consolas
     ]
     for font_name in windows_paths:
         try:
@@ -70,7 +70,7 @@ def get_scalable_font(font_size=100):
         except Exception:
             pass
 
-    # 4. Ultimate safety layout fallback (Stops text disappearing if fonts are completely absent)
+    # 4. Fallback safe layout scaling
     try:
         return ImageFont.load_default(size=font_size)
     except Exception:
@@ -85,23 +85,23 @@ def draw_digital_display(value, image_filename, is_frequency=False):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # Dynamic alignment frame anchors matching your graphics
+        # Dynamic center coordinates relative to background size
         center_x = base_img.size[0] * 0.50
         center_y = base_img.size[1] * 0.515
 
-        # Font size configuration
+        # Font configuration
         font = get_scalable_font(font_size=95)
         text_str = str(value)
         
-        # Color profile matching your dashboard theme
+        # Color profiling
         text_color = (255, 235, 0, 255) if (is_frequency or "HZ" in image_filename.upper()) else (0, 240, 255, 255)
 
-        # Calculate exact bounding size using Pillow's modern textbbox matrix
+        # Calculate bounding dimensions 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
 
-        # Calculate offset variables to center the text
+        # Calculate exact center positions
         x = center_x - (text_w / 2)
         y = center_y - (text_h / 2) - bbox[1]
 
@@ -130,4 +130,31 @@ def live_panel():
             u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
             u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
             u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", is_frequency=False)
+                if img1:
+                    slot1.image(img1, use_container_width=True)
+
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", is_frequency=False)
+                if img2:
+                    slot2.image(img2, use_container_width=True)
+
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", is_frequency=False)
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", is_frequency=True)
+                if img4:
+                    slot4.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server returned status code {response.status_code}")
+
+    except Exception as e:
+        st.error(f"Live Telemetry Link Error: {e}")
+
+live_panel()
