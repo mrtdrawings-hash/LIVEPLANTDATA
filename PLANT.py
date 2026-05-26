@@ -75,7 +75,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # Center placement for text
+        # Baseline text positioning center
         center_x = width * 0.485
         center_y = height * 0.49
 
@@ -97,7 +97,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         y = center_y - (text_h / 2) - bbox[1]
         draw.text((x, y), text_str, fill=text_color, font=font)
 
-        # --- RE-ENGINEERED CLOCKWISE COMPASS POINTER MAPPING ---
+        # --- HIGH-PRECISION TOTAL METER DIAL POINTER CALIBRATION ---
         if display_type == "total":
             try:
                 numeric_val = float(value)
@@ -106,55 +106,58 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
             numeric_val = max(0.0, min(numeric_val, 750.0))
 
-            # Strictly monotonic mapping moving continuously clockwise
-            mw_bp = [0, 75, 150, 225, 300, 375, 450, 525, 600, 675, 750]
-            compass_bp = [217, 247, 277, 309, 341, 360, 386, 418, 450, 482, 513]
+            # Fixed rotation center specific to the TOTAL dial layout geometry
+            dial_center_x = width * 0.492
+            dial_center_y = height * 0.508
 
-            compass_deg = compass_bp[0]
+            # Precise angular map matching physical layout positions
+            mw_bp = [0, 75, 150, 225, 300, 375, 450, 525, 600, 675, 750]
+            ang_bp = [-144.0, -112.0, -80.0, -47.0, -13.0, 21.0, 54.0, 87.0, 120.0, 153.0, 185.0]
+
+            angle_deg = ang_bp[0]
             for i in range(len(mw_bp) - 1):
                 if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
                     fraction = (numeric_val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
-                    compass_deg = compass_bp[i] + fraction * (compass_bp[i+1] - compass_bp[i])
+                    angle_deg = ang_bp[i] + fraction * (ang_bp[i+1] - ang_bp[i])
                     break
             
-            # Standard conversion from clockwise compass degrees back to standard unit circle radians
-            angle_rad = math.radians(90.0 - compass_deg)
+            # Convert pointer trajectory angle directly to standard image space coordinates
+            angle_rad = math.radians(angle_deg - 90.0)
 
-            # Sizing parameters to trace cleanly on the outer track scale rim
-            outer_rim_radius = width * 0.415
-            pointer_length = width * 0.085
+            # Outer rim radius positioning tracker bounds
+            outer_rim_radius = width * 0.428
+            pointer_length = width * 0.080
             base_width = width * 0.016
 
             cos_a = math.cos(angle_rad)
             sin_a = math.sin(angle_rad)
 
-            # Center/Base pivot coordinates on the rim track
-            pivot_x = center_x + outer_rim_radius * cos_a
-            pivot_y = center_y - outer_rim_radius * sin_a
+            # Define point positions along outer rim track
+            pivot_x = dial_center_x + outer_rim_radius * cos_a
+            pivot_y = dial_center_y + outer_rim_radius * sin_a
 
-            # Inward pointing arrow tip marker coordinates
-            tip_x = center_x + (outer_rim_radius - pointer_length) * cos_a
-            tip_y = center_y - (outer_rim_radius - pointer_length) * sin_a
+            tip_x = dial_center_x + (outer_rim_radius - pointer_length) * cos_a
+            tip_y = dial_center_y + (outer_rim_radius - pointer_length) * sin_a
 
             perp_l = angle_rad + (math.pi / 2.0)
             perp_r = angle_rad - (math.pi / 2.0)
 
             base_l_x = pivot_x + base_width * math.cos(perp_l)
-            base_l_y = pivot_y - base_width * math.sin(perp_l)
+            base_l_y = pivot_y + base_width * math.sin(perp_l)
             base_r_x = pivot_x + base_width * math.cos(perp_r)
-            base_r_y = pivot_y - base_width * math.sin(perp_r)
+            base_r_y = pivot_y + base_width * math.sin(perp_r)
 
-            # Render high-visibility pointer structure
+            # Render exact alignment arrow marker wedge (Crimson Red)
             draw.polygon(
                 [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
                 fill=(235, 40, 30, 255)
             )
 
-            # Anchor cap rivet
-            cap_r = width * 0.008
+            # Center base structural rim cap rivet
+            cap_r = width * 0.007
             draw.ellipse(
                 [pivot_x - cap_r, pivot_y - cap_r, pivot_x + cap_r, pivot_y + cap_r],
-                fill=(90, 90, 90, 255)
+                fill=(80, 80, 80, 255)
             )
 
         return Image.alpha_composite(base_img, overlay)
