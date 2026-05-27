@@ -116,7 +116,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             # Map standard unit orientation tracking space
             angle_rad = math.radians(270.0 - angle_deg)
 
-            angle_deg = ang_bp[0]
+            #angle_deg = ang_bp[0]
             for i in range(len(mw_bp) - 1):
                 if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
                     fraction = (numeric_val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
