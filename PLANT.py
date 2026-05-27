@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom injection for cross-device center alignment and image handling
+# Inject custom CSS for center alignment and mobile scaling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -51,7 +51,7 @@ st.markdown("""
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# --- 3. RENDERING ENGINE UTILITIES (PIL IMAGE CACHING & DRAWING) ---
+# --- 3. RENDERING ENGINE UTILITIES ---
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
     paths_to_check = [
@@ -131,11 +131,15 @@ def draw_digital_display(value, image_filename, display_type="mw"):
     except Exception:
         return None
 
-def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
-    try:
-        img = Image.open(img_path).convert("RGB")
-    except Exception:
+def draw_two_lines_on_gauge(img_path, lines, font_size=42, line_spacing=8):
+    # Fallback cascade using Gemini_T.jpg if GAUGE.jpg isn't present
+    base_img = load_base_image(img_path)
+    if base_img is None:
+        base_img = load_base_image("Gemini_T.jpg")
+    if base_img is None:
         return None
+        
+    img = base_img.convert("RGB")
     draw = ImageDraw.Draw(img)
     font = get_scalable_font(font_size=font_size)
     img_w, img_h = img.size
@@ -146,13 +150,14 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
     h2 = bbox2[3] - bbox2[1]
     
     total_h = h1 + line_spacing + h2
-    start_y = (img_h - total_h) // 2 + 10
+    start_y = (img_h - total_h) // 2 + 15
     
-    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(255, 255, 255), font=font)
-    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
+    # Render with high-contrast text directly over the central display zone
+    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(0, 0, 0), font=font)
+    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(80, 80, 80), font=font)
     return img
 
-# --- 4. DATA TELEMETRY ACQUISITION CORE (MERIT LEDGER) ---
+# --- 4. DATA TELEMETRY ACQUISITION CORE ---
 def fetch_realtime_grid_data():
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     live_tn_demand = 0
@@ -190,7 +195,6 @@ def fetch_realtime_grid_data():
     except Exception: 
         pass
 
-    # Structurally safe fallback dictionary declaration (Fixes line 185 issue)
     if live_tn_demand == 0: 
         live_tn_demand = 14900 + np.random.randint(-200, 200)
     if live_national_demand == 0: 
@@ -203,4 +207,145 @@ def fetch_realtime_grid_data():
 def generate_24hr_grid_history(live_tn, live_nat):
     current_time = datetime.now(IST)
     time_slots, state_vals, national_vals = [], [], []
-    for i in range(
+    for i in range(96, 0, -1):
+        slot_time = current_time - timedelta(minutes=i * 15)
+        time_slots.append(slot_time.strftime("%H:%M"))
+        state_vals.append(14900 + np.random.randint(-200, 200))
+        national_vals.append(204000 + np.random.randint(-2000, 2000))
+    time_slots.append(current_time.strftime("%H:%M"))
+    state_vals.append(live_tn)
+    national_vals.append(live_nat)
+    return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
+
+# --- 5. SIDEBAR OPTIONS & NAVIGATION CONTROLS ---
+st.sidebar.header("🔄 Global Parameters")
+refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
+auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
+gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 240, 10)
+
+# Main Navigation Tabs Setup
+tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
+
+# --- TAB 1: NCTPS STAGE 1 ALTERNATOR LIVE FEED ---
+with tab_generation:
+    st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
+    st.markdown("### Generation Overview: Main Alternator Panel Arrays")
+    
+    generation_container = st.container()
+
+    @st.fragment(run_every=refresh_interval if auto_refresh else None)
+    def run_generation_stream():
+        plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+        
+        with generation_container:
+            col1, col2, col3, col4, col5 = st.columns(5)
+            slot1 = col1.empty()
+            slot2 = col2.empty()
+            slot3 = col3.empty()
+            slot4 = col4.empty()
+            slot5 = col5.empty()
+            
+            try:
+                res = requests.get(plant_url, timeout=4)
+                nctps_data = res.json() or {} if res.status_code == 200 else {}
+                
+                u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+                u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+                u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+                hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+                total_load = 0.0
+                valid_count = 0
+                for v in [u1, u2, u3]:
+                    try:
+                        total_load += float(v)
+                        valid_count += 1
+                    except ValueError: 
+                        pass
+                total_str = str(int(total_load)) if valid_count > 0 else "N/A"
+
+                if u1 != "N/A":
+                    img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
+                    if img: slot1.image(img, use_container_width=True)
+                if u2 != "N/A":
+                    img = draw_digital_display(u2, "Gemini_U2.jpg", display_type="mw")
+                    if img: slot2.image(img, use_container_width=True)
+                if u3 != "N/A":
+                    img = draw_digital_display(u3, "Gemini_U3.jpg", display_type="mw")
+                    if img: slot3.image(img, use_container_width=True)
+                if total_str != "N/A":
+                    img = draw_digital_display(total_str, "Gemini_T.jpg", display_type="total")
+                    if img: slot4.image(img, use_container_width=True)
+                if hz != "N/A":
+                    img = draw_digital_display(hz, "HZ.jpg", display_type="hz")
+                    if img: slot5.image(img, use_container_width=True)
+            except Exception as e:
+                st.error(f"Generation Bus Interface Fault: {e}")
+
+    run_generation_stream()
+
+# --- TAB 2: MERIT DESPATCH & DEMAND BALANCING MATRIX ---
+with tab_grid:
+    grid_container = st.container()
+
+    @st.fragment(run_every=60 if auto_refresh else None)
+    def run_grid_stream():
+        with grid_container:
+            st.markdown("### Real-Time Merit Dispatch & Demand Operations")
+            
+            live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
+            grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
+
+            st.markdown(
+                f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
+                f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
+                unsafe_allow_html=True
+            )
+
+            c_state, c_national = st.columns(2)
+            with c_state:
+                st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
+                st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
+                _, d_center_state, _ = st.columns([1, 2, 1])
+                with d_center_state:
+                    # Uses Gemini_T.jpg as a reliable layout canvas for grid metrics
+                    img_state = draw_two_lines_on_gauge("Gemini_T.jpg", [f"{live_tn_val:,}", "MW"], font_size=45)
+                    if img_state: 
+                        st.image(img_state, width=gauge_size, use_container_width=False)
+                    else: 
+                        st.error("State matrix dial asset missing.")
+
+            with c_national:
+                st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
+                st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
+                _, d_center_nat, _ = st.columns([1, 2, 1])
+                with d_center_nat:
+                    img_nat = draw_two_lines_on_gauge("Gemini_T.jpg", [f"{live_national_val:,}", "MW"], font_size=40)
+                    if img_nat: 
+                        st.image(img_nat, width=gauge_size, use_container_width=False)
+                    else: 
+                        st.error("National matrix dial asset missing.")
+
+            st.markdown("---")
+            st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
+            mc1, mc2, mc3 = st.columns(3)
+            with mc1: 
+                st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
+            with mc2: 
+                st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
+            with mc3: 
+                st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
+
+            st.markdown("---")
+            st.markdown("### Grid Load Curves (Trailing 24 Hours)")
+            trend_df_indexed = grid_df.set_index("Time")
+            chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True, key="grid_chart_view_radio")
+
+            if chart_view == "Both":
+                st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
+            elif chart_view == "State Only":
+                st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
+            else:
+                st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
+
+    run_grid_stream()
