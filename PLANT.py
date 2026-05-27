@@ -7,14 +7,14 @@ import requests
 from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageDraw, ImageFont
 
-# --- 1. GLOBAL PAGE ARCHITECTURE & METRIC STYLES ---
+# --- 1. GLOBAL LAYOUT CONFIGURATION & CUSTOM STYLES ---
 st.set_page_config(
     page_title="NCTPS Stage-I & Grid Monitoring Dashboard",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom injection for cross-device center alignment and image handling
+# Inject clean global alignments for both Desktop and Mobile view scaling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -47,13 +47,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ENVIRONMENT PATHS & TIMEZONE OBJECTS ---
+# --- 2. ENVIRONMENT PATHS & UTILITIES ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# --- 3. RENDERING ENGINE UTILITIES ---
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
+    """Safely reads and standardizes local background dial images."""
     paths_to_check = [
         os.path.join(current_dir, image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -71,15 +71,14 @@ def load_base_image(image_filename):
         return None
 
 def get_scalable_font(font_size=135):
+    """Resolves cross-platform font rendering engines cleanly."""
     font_names = ["digital-7.ttf", "font.ttf"]
     for f_name in font_names:
         for folder in [current_dir, os.getcwd()]:
             p = os.path.join(folder, f_name)
             if os.path.exists(p):
-                try: 
-                    return ImageFont.truetype(p, font_size)
-                except Exception: 
-                    pass
+                try: return ImageFont.truetype(p, font_size)
+                except Exception: pass
 
     linux_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -87,19 +86,17 @@ def get_scalable_font(font_size=135):
     ]
     for path in linux_paths:
         if os.path.exists(path):
-            try: 
-                return ImageFont.truetype(path, font_size)
-            except Exception: 
-                pass
+            try: return ImageFont.truetype(path, font_size)
+            except Exception: pass
 
-    try: 
-        return ImageFont.truetype("arialbd.ttf", font_size)
-    except Exception: 
-        pass
+    try: return ImageFont.truetype("arialbd.ttf", font_size)
+    except Exception: pass
 
-    return ImageFont.load_default()
+    try: return ImageFont.load_default(size=font_size)
+    except Exception: return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, display_type="mw"):
+    """Overlays clean digital typography over static gauge backgrounds."""
     base_img = load_base_image(image_filename)
     if base_img is None:
         return None
@@ -131,12 +128,12 @@ def draw_digital_display(value, image_filename, display_type="mw"):
     except Exception:
         return None
 
-def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=10):
-    base_img = load_base_image(img_path)
-    if base_img is None:
+def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
+    """Draws metrics inside central grid demand dials."""
+    try:
+        img = Image.open(img_path).convert("RGB")
+    except Exception:
         return None
-        
-    img = base_img.convert("RGB")
     draw = ImageDraw.Draw(img)
     font = get_scalable_font(font_size=font_size)
     img_w, img_h = img.size
@@ -147,20 +144,13 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=10):
     h2 = bbox2[3] - bbox2[1]
     
     total_h = h1 + line_spacing + h2
-    # Vertically shifted downward to target the dark dead center of Procircle
-    start_y = (img_h - total_h) // 2 + 25 
+    start_y = (img_h - total_h) // 2 + 10
     
-    # Line 1: Pure crisp white for high visibility numbers
-    x1 = (img_w - (bbox1[2] - bbox1[0])) // 2
-    draw.text((x1, start_y), lines[0], fill=(255, 255, 255), font=font)
-    
-    # Line 2: Electric Cyan/Blue for the unit tag
-    x2 = (img_w - (bbox2[2] - bbox2[0])) // 2
-    draw.text((x2, start_y + h1 + line_spacing), lines[1], fill=(0, 240, 255), font=font)
-    
+    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(255, 255, 255), font=font)
+    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
     return img
 
-# --- 4. DATA TELEMETRY ACQUISITION CORE ---
+# --- 3. LIVE WEB TELEMETRY CORE ENGINE ---
 def fetch_realtime_grid_data():
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     live_tn_demand = 0
@@ -174,15 +164,13 @@ def fetch_realtime_grid_data():
                 if record.get('state_name', '').strip().lower() == 'tamil nadu':
                     live_tn_demand = int(float(record.get('demand_met', 0)))
                     break
-    except Exception: 
-        pass
+    except Exception: pass
 
     try:
         nat_res = requests.get("https://meritindia.in/api/all-india-power-position", headers=headers, timeout=4)
         if nat_res.status_code == 200:
             live_national_demand = int(float(nat_res.json().get('all_india_data', {}).get('demand_met', 0)))
-    except Exception: 
-        pass
+    except Exception: pass
 
     try:
         station_url = "https://meritindia.in/api/state-wise-station-data?state_id=27"
@@ -195,22 +183,18 @@ def fetch_realtime_grid_data():
                     nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
                     nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
                     break
-    except Exception: 
-        pass
+    except Exception: pass
 
-    if live_tn_demand == 0: 
-        live_tn_demand = 14900 + np.random.randint(-200, 200)
-    if live_national_demand == 0: 
-        live_national_demand = 204000 + np.random.randint(-2000, 2000)
-    if nctps1_costs["total"] == "0.00": 
-        nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
+    if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
+    if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
+    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
             
     return live_tn_demand, live_national_demand, nctps1_costs
 
 def generate_24hr_grid_history(live_tn, live_nat):
     current_time = datetime.now(IST)
     time_slots, state_vals, national_vals = [], [], []
-    for i in range(96, 0, -1):
+    for i in range(96, 1, -1):
         slot_time = current_time - timedelta(minutes=i * 15)
         time_slots.append(slot_time.strftime("%H:%M"))
         state_vals.append(14900 + np.random.randint(-200, 200))
@@ -220,20 +204,21 @@ def generate_24hr_grid_history(live_tn, live_nat):
     national_vals.append(live_nat)
     return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
 
-# --- 5. SIDEBAR OPTIONS & NAVIGATION CONTROLS ---
+# --- 4. SIDEBAR CONFIGURATION CONTROLS ---
 st.sidebar.header("🔄 Global Parameters")
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
-gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 280, 10)
+gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# Main Navigation Tabs Setup
+# --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
-# --- TAB 1: NCTPS STAGE 1 ALTERNATOR LIVE FEED ---
+# --- TAB 1: GENERATION SCADA FACE ---
 with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
+    # Structural Fix: We isolate the target container slots cleanly inside our scoped execution unit
     generation_container = st.container()
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
@@ -263,10 +248,10 @@ with tab_generation:
                     try:
                         total_load += float(v)
                         valid_count += 1
-                    except ValueError: 
-                        pass
+                    except ValueError: pass
                 total_str = str(int(total_load)) if valid_count > 0 else "N/A"
 
+                # Standard display maps cleanly matching local image file sets
                 if u1 != "N/A":
                     img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
                     if img: slot1.image(img, use_container_width=True)
@@ -287,31 +272,59 @@ with tab_generation:
 
     run_generation_stream()
 
-# --- TAB 2: MERIT DESPATCH & DEMAND BALANCING MATRIX ---
+# --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
 with tab_grid:
-    grid_container = st.container()
+    st.title("National & State Grid Monitoring Dashboard")
+    st.markdown("### Real-Time Merit Dispatch & Demand Operations")
+    
+    live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
+    grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
 
-    @st.fragment(run_every=60 if auto_refresh else None)
-    def run_grid_stream():
-        with grid_container:
-            st.markdown("### Real-Time Merit Dispatch & Demand Operations")
-            
-            live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
-            grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
+    st.markdown(
+        f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
+        f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
+        unsafe_allow_html=True
+    )
 
-            st.markdown(
-                f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
-                f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
-                unsafe_allow_html=True
-            )
+    c_state, c_national = st.columns(2)
+    with c_state:
+        st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
+        st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
+        _, d_center, _ = st.columns([1, 2, 1])
+        with d_center:
+            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
+            if img: st.image(img, width=gauge_size, use_container_width=False)
+            else: st.error("State matrix asset missing.")
 
-            c_state, c_national = st.columns(2)
-            with c_state:
-                st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
-                st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
-                _, d_center_state, _ = st.columns([1, 2, 1])
-                with d_center_state:
-                    # White text overlay scaled perfectly for Procircle background
-                    img_state = draw_two_lines_on_gauge("Procircle.jpg", [f"{live_tn_val:,}", "MW"], font_size=55)
-                    if img_state: 
-                        st.image(img_state, width
+    with c_national:
+        st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
+        st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
+        _, d_center, _ = st.columns([1, 2, 1])
+        with d_center:
+            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_national_val:,}", "MW"])
+            if img: st.image(img, width=gauge_size, use_container_width=False)
+            else: st.error("National matrix asset missing.")
+
+    st.markdown("---")
+    st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
+    mc1, mc2, mc3 = st.columns(3)
+    with mc1: st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
+    with mc2: st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
+    with mc3: st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
+
+    st.markdown("---")
+    st.markdown("### Grid Load Curves (Trailing 24 Hours)")
+    trend_df_indexed = grid_df.set_index("Time")
+    chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True)
+
+    if chart_view == "Both":
+        st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
+    elif chart_view == "State Only":
+        st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
+    else:
+        st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
+
+# --- 6. GLOBAL REFRESH OVERRIDE LINK ---
+if auto_refresh:
+    time.sleep(60)
+    st.rerun()
