@@ -111,8 +111,10 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             dial_center_y = height * 0.50
 
             # True Physical Breakpoints calibrated directly against the image layout
+            # True Physical Breakpoints calibrated for a 300-degree sweep
+            # 0 MW = 240 degrees, 750 MW = -60 degrees
             mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0]
-            ang_bp = [145.0, 116.0, 86.0, 54.0, 24.0, 0.0, -24.0, -54.0, -86.0, -116.0, -145.0]
+            ang_bp = [240.0, 210.0, 180.0, 150.0, 120.0, 90.0, 60.0, 30.0, 0.0, -30.0, -60.0]
 
             angle_deg = ang_bp[0]
             for i in range(len(mw_bp) - 1):
