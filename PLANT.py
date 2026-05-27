@@ -1,189 +1,230 @@
 import streamlit as st
-import numpy as np
-from PIL import Image, ImageDraw
-import io
+import requests
+import os
+import math
+from PIL import Image, ImageDraw, ImageFont
 
-# --- CONFIGURATION & PAGE SETUP ---
-st.set_page_config(page_title="NCTPS Stage-I Generation Dashboard", layout="wide")
-st.title("⚡ NCTPS Stage-I Online Monitoring System (EMS)")
-st.write("Real-time telemetry and non-linear gauge calibration matrix.")
+st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
+st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
 
-# --- DIALS CONFIGURATION DATABASE ---
-# Every physical dial has its own unique scale, markings, and geometric wrap boundaries.
-DIALS_DATABASE = {
-    "Total MW": {
-        "unit": "MW",
-        "min_val": 0.0,
-        "max_val": 750.0,
-        "step": 5.0,
-        "default": 375.0,
-        "calibration": {
-        "MW":     [0.0,   75.0,  150.0,  225.0,  300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0],
-        "Angle":  [211.5, 196.5, 178.5,  156.5,  126.0, 87.0,  48.5,  19.5,  356.5, 344.5, 328.0]
-        },
-        "wrap_threshold": 220.0  # Split point where values wrap past 360/0
-    },
-    "Unit 1 Load": {
-        "unit": "MW",
-        "min_val": 0.0,
-        "max_val": 250.0,
-        "step": 2.0,
-        "default": 210.0,
-        "calibration": {
-            # Example non-linear calibration curve for a 210MW class machine
-            "MW":     [0.0,   50.0,  100.0,  150.0,  200.0,  210.0,  250.0],
-            "Angle":  [220.0, 185.0, 145.0,  105.0,  65.0,   55.0,   20.0]
-        },
-        "wrap_threshold": 180.0
-    },
-    "Grid Frequency": {
-        "unit": "Hz",
-        "min_val": 47.5,
-        "max_val": 51.5,
-        "step": 0.01,
-        "default": 50.00,
-        "calibration": {
-            # Symmetrical scale centered precisely around 50.0 Hz
-            "MW":     [47.5,  48.5,  49.5,  50.0,  50.5,  51.5],
-            "Angle":  [225.0, 180.0, 135.0, 90.0,  45.0,  0.0]
-        },
-        "wrap_threshold": 180.0
-    }
-}
+st.sidebar.header("🔄 Refresh Settings")
+refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
+auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
 
-# --- CALIBRATION INTERPOLATION ENGINE ---
-def calculate_pointer_angle(value, dial_config):
-    """
-    Calculates the exact procircle matching angle for a given raw telemetry value
-    by unrolling continuous geometric curves across the 0/360 boundary.
-    """
-    cal = dial_config["calibration"]
-    x_points = cal["MW"]
-    y_points = cal["Angle"]
-    threshold = dial_config["wrap_threshold"]
-    
-    # Boundary capping
-    value = max(dial_config["min_val"], min(dial_config["max_val"], value))
-    
-    # Unroll the angles cleanly past the circular axis crossover
-    unrolled_angles = []
-    for angle in y_points:
-        if angle > threshold:
-            unrolled_angles.append(angle - 360.0)
-        else:
-            unrolled_angles.append(angle)
-            
-    # Linearly interpolate within the local piecewise grid segment
-    target_angle = float(np.interp(value, x_points, unrolled_angles))
-    
-    # Normalise results back to standard 0-360 Procircle limits
-    if target_angle < 0:
-        target_angle += 360.0
+@st.cache_data(show_spinner=False)
+def load_base_image(image_filename):
+    paths_to_check = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), image_filename),
+        os.path.join(os.getcwd(), image_filename),
+        image_filename,
+    ]
+    target_path = next((p for p in paths_to_check if os.path.exists(p)), None)
+    if not target_path:
+        return None
+
+    png_img = Image.open(target_path).convert("RGBA")
+    solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+    solid_bg.paste(png_img, (0, 0), png_img)
+    return solid_bg.convert("RGBA")
+
+def get_scalable_font(font_size=135):
+    custom_font_name = "digital-7.ttf"
+    paths_to_check = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), custom_font_name),
+        os.path.join(os.getcwd(), custom_font_name),
+        custom_font_name
+    ]
+    font_path = next((p for p in paths_to_check if os.path.exists(p)), None)
+    if font_path:
+        try:
+            return ImageFont.truetype(font_path, font_size)
+        except Exception:
+            pass
+
+    linux_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
+    ]
+    for path in linux_paths:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, font_size)
+            except Exception:
+                pass
+
+    windows_paths = ["arialbd.ttf", "trebucbd.ttf", "consola.ttf"]
+    for font_name in windows_paths:
+        try:
+            return ImageFont.truetype(font_name, font_size)
+        except Exception:
+            pass
+
+    try:
+        return ImageFont.load_default(size=font_size)
+    except Exception:
+        return ImageFont.load_default()
+
+def draw_digital_display(value, image_filename, display_type="mw"):
+    base_img = load_base_image(image_filename)
+    if base_img is None:
+        return None
+
+    try:
+        width, height = base_img.size
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # High visibility absolute central placement
+        center_x = width * 0.485
+        center_y = height * 0.49
+
+        font = get_scalable_font(font_size=135)
+        text_str = str(value)
         
-    return round(target_angle, 2)
+        if display_type == "hz":
+            text_color = (255, 235, 0, 255)
+        elif display_type == "total":
+            text_color = (0, 0, 0, 255)  # Clean sharp black contrast over white background
+        else:
+            text_color = (0, 240, 255, 255)
 
-# --- DYNAMIC IMAGE GENERATION ENGINE ---
-def generate_gauge_face(angle_deg, label_text):
-    """
-    Generates an on-the-fly digital representation of a clear Procircle plate 
-    with a needle dynamically positioned at the calibrated angle.
-    """
-    # Create a transparent square canvas
-    img_size = 400
-    center = img_size // 2
-    image = Image.new("RGBA", (img_size, img_size), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(image)
-    
-    # Draw outer procircle ring boundary line
-    draw.ellipse([10, 10, img_size-10, img_size-10], outline="#1E1E1E", width=3)
-    draw.ellipse([15, 15, img_size-15, img_size-15], outline="#A0A0A0", width=1)
-    
-    # Convert procircle orientation: 0 degrees is East (3 o'clock), running Counter-Clockwise.
-    # PIL's rotate function rotates counter-clockwise naturally.
-    
-    # Create a separate layer purely for the pointer needle (pointing along 0° / East initially)
-    needle_layer = Image.new("RGBA", (img_size, img_size), (255, 255, 255, 0))
-    needle_draw = ImageDraw.Draw(needle_layer)
-    
-    # Draw high-visibility tapered technical pointer needle pointing right (0 degrees)
-    needle_draw.polygon([
-        (center, center - 4),
-        (img_size - 30, center - 1),
-        (img_size - 15, center),      # Tip point
-        (img_size - 30, center + 1),
-        (center, center + 4)
-    ], fill="#D32F2F", outline="#B71C1C")
-    
-    # Rotate needle by target calibration angle (pivoting on center axis)
-    rotated_needle = needle_layer.rotate(angle_deg, resample=Image.BICUBIC, center=(center, center))
-    
-    # Composite the needle layer onto the primary gauge face base
-    image = Image.alpha_composite(image, rotated_needle)
-    
-    # Standard center hub cap detailing
-    draw.ellipse([center-8, center-8, center+8, center+8], fill="#263238", outline="#000000", width=2)
-    draw.ellipse([center-3, center-3, center+3, center+3], fill="#CFD8DC")
-    
-    # Injected reference texts inside the rendering box
-    draw.text((center - 40, center + 40), label_text, fill="#333333")
-    
-    return image
+        bbox = draw.textbbox((0, 0), text_str, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
 
+        x = center_x - (text_w / 2)
+        y = center_y - (text_h / 2) - bbox[1]
+        draw.text((x, y), text_str, fill=text_color, font=font)
 
-# --- MAIN UI WORKSPACE LAYOUT ---
-st.subheader("📊 Live Telemetry Overrides")
-user_inputs = {}
+        # --- LINEAR CO-ORDINATE SYSTEM FOR TOTAL MW DIAL ---
+        if display_type == "total":
+            try:
+                numeric_val = float(value)
+            except ValueError:
+                numeric_val = 0.0
 
-# Dynamically render inputs for all tracking systems in parallel columns
-input_cols = st.columns(len(DIALS_DATABASE))
-for idx, (dial_name, config) in enumerate(DIALS_DATABASE.items()):
-    with input_cols[idx]:
-        st.markdown(f"**{dial_name} ({config['unit']})**")
-        user_inputs[dial_name] = st.slider(
-            f"Adjust {dial_name}:",
-            min_value=config["min_val"],
-            max_value=config["max_val"],
-            value=config["default"],
-            step=config["step"],
-            key=f"slider_{dial_name}",
-            label_visibility="collapsed"
-        )
+            numeric_val = max(0.0, min(numeric_val, 750.0))
 
-st.markdown("---")
-st.subheader("🎯 Real-Time Mechanical Gauge Alignments")
+            # Symmetric absolute frame alignment center positions
+            dial_center_x = width * 0.50
+            dial_center_y = height * 0.50
 
-# Render matching dynamic gauges inside primary grid alignment
-gauge_cols = st.columns(len(DIALS_DATABASE))
-for idx, (dial_name, config) in enumerate(DIALS_DATABASE.items()):
-    current_val = user_inputs[dial_name]
-    
-    # 1. Map telemetry value to precise mechanical angular matrix position
-    calculated_angle = calculate_pointer_angle(current_val, config)
-    
-    # 2. Render physical pointer assembly alignment
-    gauge_image = generate_gauge_face(calculated_angle, f"{current_val} {config['unit']}")
-    
-    with gauge_cols[idx]:
-        st.markdown(f"<h3 style='text-align: center; color: #1E3A8A;'>{dial_name}</h3>", unsafe_allow_html=True)
-        st.image(gauge_image, use_container_width=True)
-        st.metric(
-            label="Procircle Native Reading", 
-            value=f"{calculated_angle}°", 
-            delta=f"{current_val} {config['unit']}",
-            delta_color="off"
-        )
+            # Corrected linear breakpoints matching physical layout (30 degrees per 75 MW)
+            mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0],
+            ang_bp = [150.0, 120.0, 90.0, 60.0, 30.0, 0.0, -30.0, -60.0, -90.0, -120.0, -150.0]
+                           
+            angle_deg = ang_bp[0]
+            for i in range(len(mw_bp) - 1):
+                if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
+                    fraction = (numeric_val - mw_bp[i]) / (mw_bp[i+1] - mw_bp[i])
+                    angle_deg = ang_bp[i] + fraction * (ang_bp[i+1] - ang_bp[i])
+                    break
+            
+            # Map standard unit orientation tracking space
+            angle_rad = math.radians(270.0 - angle_deg)
 
-# --- TECHNICAL METRICS CALIBRATION DATABASES ---
-with st.expander("🛠️ View Multi-Dial Internal Piecewise Calibration Matrices"):
-    matrix_cols = st.columns(len(DIALS_DATABASE))
-    for idx, (dial_name, config) in enumerate(DIALS_DATABASE.items()):
-        with matrix_cols[idx]:
-            st.markdown(f"**{dial_name} Matrix Map**")
-            st.data_editor(
-                {
-                    f"Value ({config['unit']})": config["calibration"]["MW"],
-                    "Procircle Mark Line (° )": config["calibration"]["Angle"]
-                },
-                key=f"editor_{dial_name}",
-                disabled=True
+            # Sizing matrices tracking along the copper border frame
+            outer_rim_radius = width * 0.448
+            pointer_length = width * 0.072
+            base_width = width * 0.015
+
+            cos_a = math.cos(angle_rad)
+            sin_a = math.sin(angle_rad)
+
+            # Outer rim baseline contact tracks
+            pivot_x = dial_center_x + outer_rim_radius * cos_a
+            pivot_y = dial_center_y + outer_rim_radius * sin_a
+
+            # Sharp inner-pointing arrow apex definitions
+            tip_x = dial_center_x + (outer_rim_radius - pointer_length) * cos_a
+            tip_y = dial_center_y + (outer_rim_radius - pointer_length) * sin_a
+
+            perp_l = angle_rad + (math.pi / 2.0)
+            perp_r = angle_rad - (math.pi / 2.0)
+
+            base_l_x = pivot_x + base_width * math.cos(perp_l)
+            base_l_y = pivot_y + base_width * math.sin(perp_l)
+            base_r_x = pivot_x + base_width * math.cos(perp_r)
+            base_r_y = pivot_y + base_width * math.sin(perp_r)
+
+            # Render structured wedge indicator (Deep Red)
+            draw.polygon(
+                [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
+                fill=(220, 35, 25, 255)
             )
+
+            # Alignment hub accent cap rivet
+            cap_r = width * 0.007
+            draw.ellipse(
+                [pivot_x - cap_r, pivot_y - cap_r, pivot_x + cap_r, pivot_y + cap_r],
+                fill=(70, 70, 70, 255)
+            )
+
+        return Image.alpha_composite(base_img, overlay)
+    except Exception as e:
+        st.error(f"Render Error on {image_filename}: {e}")
+        return None
+
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+
+col1, col2, col3, col4, col5 = st.columns(5)
+slot1 = col1.empty()
+slot2 = col2.empty()
+slot3 = col3.empty()
+slot4 = col4.empty()
+slot5 = col5.empty()
+
+@st.fragment(run_every=refresh_interval if auto_refresh else None)
+def live_panel():
+    try:
+        response = requests.get(url, timeout=4)
+        if response.status_code == 200:
+            nctps_data = response.json() or {}
+
+            u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+            u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+            total_load = 0.0
+            valid_units = 0
+            for val in [u1_val, u2_val, u3_val]:
+                try:
+                    total_load += float(val)
+                    valid_units += 1
+                except ValueError:
+                    pass
+            
+            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
+
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
+                if img1:
+                    slot1.image(img1, use_container_width=True)
+
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", display_type="mw")
+                if img2:
+                    slot2.image(img2, use_container_width=True)
+
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            if total_val_str != "N/A":
+                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
+                if img_total:
+                    slot4.image(img_total, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
+                if img4:
+                    slot5.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server error: {response.status_code}")
+    except Exception as e:
+        st.error(f"Telemetry Link Error: {e}")
+
+live_panel()
