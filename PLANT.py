@@ -19,9 +19,7 @@ def load_base_image(image_filename):
         image_filename,
     ]
     target_path = next((p for p in paths_to_check if os.path.exists(p)), None)
-    
     if not target_path:
-        st.warning(f"Missing background image: {image_filename}")
         return None
 
     png_img = Image.open(target_path).convert("RGBA")
@@ -114,9 +112,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
             # PIL Angles: 0=Right, 90=Down, 180=Left, 270=Up
             # Dial maps: 150 MW to 180 deg (Left), 375 MW to 270 deg (Up), 600 MW to 360 deg (Right)
-            # Math: 180 degree span / 450 MW = 0.4 degrees per MW. 
-            # 0 MW starting point = 180 - (150 * 0.4) = 120 degrees
-            
+            # 180 degree span / 450 MW = 0.4 degrees per MW. Start point for 0 MW is 120 degrees.
             angle_deg = 120.0 + (numeric_val * 0.4)
             angle_rad = math.radians(angle_deg)
 
@@ -149,3 +145,50 @@ def draw_digital_display(value, image_filename, display_type="mw"):
                 [(base_l_x, base_l_y), (tip_x, tip_y), (base_r_x, base_r_y)],
                 fill=(220, 35, 25, 255)
             )
+
+            # Alignment hub accent cap rivet
+            cap_r = width * 0.007
+            draw.ellipse(
+                [pivot_x - cap_r, pivot_y - cap_r, pivot_x + cap_r, pivot_y + cap_r],
+                fill=(70, 70, 70, 255)
+            )
+
+        return Image.alpha_composite(base_img, overlay)
+    except Exception as e:
+        st.error(f"Render Error on {image_filename}: {e}")
+        return None
+
+url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+
+col1, col2, col3, col4, col5 = st.columns(5)
+slot1 = col1.empty()
+slot2 = col2.empty()
+slot3 = col3.empty()
+slot4 = col4.empty()
+slot5 = col5.empty()
+
+@st.fragment(run_every=refresh_interval if auto_refresh else None)
+def live_panel():
+    try:
+        response = requests.get(url, timeout=4)
+        if response.status_code == 200:
+            nctps_data = response.json() or {}
+
+            u1_val = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+            u2_val = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+            u3_val = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+            hz_val = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+            total_load = 0.0
+            valid_units = 0
+            for val in [u1_val, u2_val, u3_val]:
+                try:
+                    total_load += float(val)
+                    valid_units += 1
+                except ValueError:
+                    pass
+            
+            total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
+
+            if u1_val != "N/A":
+                img1 = draw_digital_display(u1_
