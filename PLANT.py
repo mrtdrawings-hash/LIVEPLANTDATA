@@ -97,7 +97,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         y = center_y - (text_h / 2) - bbox[1]
         draw.text((x, y), text_str, fill=text_color, font=font)
 
-        # --- PERFECT LINEAR CALIBRATION FOR TOTAL MW DIAL ---
+        # --- PERFECT LINEAR DIAL CALIBRATION ---
         if display_type == "total":
             try:
                 numeric_val = float(value)
@@ -110,8 +110,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             dial_center_x = width * 0.50
             dial_center_y = height * 0.50
 
-            # PIL Angles: 0=Right, 90=Down, 180=Left, 270=Up
-            # Dial span: 0 MW starts at 120 deg, increments by 0.4 degrees per MW
+            # 0 MW starts exactly at 120 degrees, increments linearly by 0.4 degrees per MW
             angle_deg = 120.0 + (numeric_val * 0.4)
             angle_rad = math.radians(angle_deg)
 
@@ -191,3 +190,31 @@ def live_panel():
 
             if u1_val != "N/A":
                 img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
+                if img1:
+                    slot1.image(img1, use_container_width=True)
+
+            if u2_val != "N/A":
+                img2 = draw_digital_display(u2_val, "Gemini_U2.jpg", display_type="mw")
+                if img2:
+                    slot2.image(img2, use_container_width=True)
+
+            if u3_val != "N/A":
+                img3 = draw_digital_display(u3_val, "Gemini_U3.jpg", display_type="mw")
+                if img3:
+                    slot3.image(img3, use_container_width=True)
+
+            if total_val_str != "N/A":
+                img_total = draw_digital_display(total_val_str, "Gemini_T.jpg", display_type="total")
+                if img_total:
+                    slot4.image(img_total, use_container_width=True)
+
+            if hz_val != "N/A":
+                img4 = draw_digital_display(hz_val, "HZ.jpg", display_type="hz")
+                if img4:
+                    slot5.image(img4, use_container_width=True)
+        else:
+            st.error(f"Server error: {response.status_code}")
+    except Exception as e:
+        st.error(f"Telemetry Link Error: {e}")
+
+live_panel()
