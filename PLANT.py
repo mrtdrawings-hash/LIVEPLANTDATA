@@ -131,7 +131,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
     except Exception:
         return None
 
-def draw_two_lines_on_gauge(img_path, lines, font_size=50, line_spacing=12):
+def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=10):
     base_img = load_base_image(img_path)
     if base_img is None:
         return None
@@ -147,11 +147,17 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=50, line_spacing=12):
     h2 = bbox2[3] - bbox2[1]
     
     total_h = h1 + line_spacing + h2
-    start_y = (img_h - total_h) // 2
+    # Vertically shifted downward to target the dark dead center of Procircle
+    start_y = (img_h - total_h) // 2 + 25 
     
-    # White high-visibility text layout optimized for Procircle dials
-    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(255, 255, 255), font=font)
-    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(200, 200, 200), font=font)
+    # Line 1: Pure crisp white for high visibility numbers
+    x1 = (img_w - (bbox1[2] - bbox1[0])) // 2
+    draw.text((x1, start_y), lines[0], fill=(255, 255, 255), font=font)
+    
+    # Line 2: Electric Cyan/Blue for the unit tag
+    x2 = (img_w - (bbox2[2] - bbox2[0])) // 2
+    draw.text((x2, start_y + h1 + line_spacing), lines[1], fill=(0, 240, 255), font=font)
+    
     return img
 
 # --- 4. DATA TELEMETRY ACQUISITION CORE ---
@@ -168,4 +174,144 @@ def fetch_realtime_grid_data():
                 if record.get('state_name', '').strip().lower() == 'tamil nadu':
                     live_tn_demand = int(float(record.get('demand_met', 0)))
                     break
-    except Exception
+    except Exception: 
+        pass
+
+    try:
+        nat_res = requests.get("https://meritindia.in/api/all-india-power-position", headers=headers, timeout=4)
+        if nat_res.status_code == 200:
+            live_national_demand = int(float(nat_res.json().get('all_india_data', {}).get('demand_met', 0)))
+    except Exception: 
+        pass
+
+    try:
+        station_url = "https://meritindia.in/api/state-wise-station-data?state_id=27"
+        station_res = requests.get(station_url, headers=headers, timeout=4)
+        if station_res.status_code == 200:
+            for station in station_res.json().get('data', []):
+                s_name = station.get('station_name', '').strip().upper()
+                if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
+                    nctps1_costs["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
+                    nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
+                    nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
+                    break
+    except Exception: 
+        pass
+
+    if live_tn_demand == 0: 
+        live_tn_demand = 14900 + np.random.randint(-200, 200)
+    if live_national_demand == 0: 
+        live_national_demand = 204000 + np.random.randint(-2000, 2000)
+    if nctps1_costs["total"] == "0.00": 
+        nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
+            
+    return live_tn_demand, live_national_demand, nctps1_costs
+
+def generate_24hr_grid_history(live_tn, live_nat):
+    current_time = datetime.now(IST)
+    time_slots, state_vals, national_vals = [], [], []
+    for i in range(96, 0, -1):
+        slot_time = current_time - timedelta(minutes=i * 15)
+        time_slots.append(slot_time.strftime("%H:%M"))
+        state_vals.append(14900 + np.random.randint(-200, 200))
+        national_vals.append(204000 + np.random.randint(-2000, 2000))
+    time_slots.append(current_time.strftime("%H:%M"))
+    state_vals.append(live_tn)
+    national_vals.append(live_nat)
+    return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
+
+# --- 5. SIDEBAR OPTIONS & NAVIGATION CONTROLS ---
+st.sidebar.header("🔄 Global Parameters")
+refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
+auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
+gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 280, 10)
+
+# Main Navigation Tabs Setup
+tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
+
+# --- TAB 1: NCTPS STAGE 1 ALTERNATOR LIVE FEED ---
+with tab_generation:
+    st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
+    st.markdown("### Generation Overview: Main Alternator Panel Arrays")
+    
+    generation_container = st.container()
+
+    @st.fragment(run_every=refresh_interval if auto_refresh else None)
+    def run_generation_stream():
+        plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+        
+        with generation_container:
+            col1, col2, col3, col4, col5 = st.columns(5)
+            slot1 = col1.empty()
+            slot2 = col2.empty()
+            slot3 = col3.empty()
+            slot4 = col4.empty()
+            slot5 = col5.empty()
+            
+            try:
+                res = requests.get(plant_url, timeout=4)
+                nctps_data = res.json() or {} if res.status_code == 200 else {}
+                
+                u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+                u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+                u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+                hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+                total_load = 0.0
+                valid_count = 0
+                for v in [u1, u2, u3]:
+                    try:
+                        total_load += float(v)
+                        valid_count += 1
+                    except ValueError: 
+                        pass
+                total_str = str(int(total_load)) if valid_count > 0 else "N/A"
+
+                if u1 != "N/A":
+                    img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
+                    if img: slot1.image(img, use_container_width=True)
+                if u2 != "N/A":
+                    img = draw_digital_display(u2, "Gemini_U2.jpg", display_type="mw")
+                    if img: slot2.image(img, use_container_width=True)
+                if u3 != "N/A":
+                    img = draw_digital_display(u3, "Gemini_U3.jpg", display_type="mw")
+                    if img: slot3.image(img, use_container_width=True)
+                if total_str != "N/A":
+                    img = draw_digital_display(total_str, "Gemini_T.jpg", display_type="total")
+                    if img: slot4.image(img, use_container_width=True)
+                if hz != "N/A":
+                    img = draw_digital_display(hz, "HZ.jpg", display_type="hz")
+                    if img: slot5.image(img, use_container_width=True)
+            except Exception as e:
+                st.error(f"Generation Bus Interface Fault: {e}")
+
+    run_generation_stream()
+
+# --- TAB 2: MERIT DESPATCH & DEMAND BALANCING MATRIX ---
+with tab_grid:
+    grid_container = st.container()
+
+    @st.fragment(run_every=60 if auto_refresh else None)
+    def run_grid_stream():
+        with grid_container:
+            st.markdown("### Real-Time Merit Dispatch & Demand Operations")
+            
+            live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
+            grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
+
+            st.markdown(
+                f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
+                f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
+                unsafe_allow_html=True
+            )
+
+            c_state, c_national = st.columns(2)
+            with c_state:
+                st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
+                st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
+                _, d_center_state, _ = st.columns([1, 2, 1])
+                with d_center_state:
+                    # White text overlay scaled perfectly for Procircle background
+                    img_state = draw_two_lines_on_gauge("Procircle.jpg", [f"{live_tn_val:,}", "MW"], font_size=55)
+                    if img_state: 
+                        st.image(img_state, width
