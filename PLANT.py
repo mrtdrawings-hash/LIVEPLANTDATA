@@ -111,9 +111,12 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             dial_center_y = height * 0.50
 
             # Corrected linear breakpoints matching physical layout (30 degrees per 75 MW)
+            # mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0]
+            # ang_bp = [150.0, 120.0, 90.0, 60.0, 30.0, 0.0, -30.0, -60.0, -90.0, -120.0, -150.0]
+            # --- PERFECTLY LINEAR 30-DEGREE UNIFORM CO-ORDINATE SYSTEM ---
             mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0]
             ang_bp = [150.0, 120.0, 90.0, 60.0, 30.0, 0.0, -30.0, -60.0, -90.0, -120.0, -150.0]
-
+                
             angle_deg = ang_bp[0]
             for i in range(len(mw_bp) - 1):
                 if mw_bp[i] <= numeric_val <= mw_bp[i+1]:
