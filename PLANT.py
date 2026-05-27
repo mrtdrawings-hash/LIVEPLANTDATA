@@ -85,7 +85,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         if display_type == "hz":
             text_color = (255, 235, 0, 255)
         elif display_type == "total":
-            text_color = (0, 0, 0, 255)  # Clean sharp black contrast over white background
+            text_color = (0, 0, 0, 255)
         else:
             text_color = (0, 240, 255, 255)
 
@@ -111,8 +111,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             dial_center_y = height * 0.50
 
             # PIL Angles: 0=Right, 90=Down, 180=Left, 270=Up
-            # Dial maps: 150 MW to 180 deg (Left), 375 MW to 270 deg (Up), 600 MW to 360 deg (Right)
-            # 180 degree span / 450 MW = 0.4 degrees per MW. Start point for 0 MW is 120 degrees.
+            # Dial span: 0 MW starts at 120 deg, increments by 0.4 degrees per MW
             angle_deg = 120.0 + (numeric_val * 0.4)
             angle_rad = math.radians(angle_deg)
 
@@ -191,4 +190,4 @@ def live_panel():
             total_val_str = str(int(total_load)) if valid_units > 0 else "N/A"
 
             if u1_val != "N/A":
-                img1 = draw_digital_display(u1_
+                img1 = draw_digital_display(u1_val, "Gemini_U1.jpg", display_type="mw")
