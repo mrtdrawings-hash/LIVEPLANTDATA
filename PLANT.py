@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 st.set_page_config(page_title="NCTPS1MW Dashboard", layout="wide")
 st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
 
+# ---------------- SETTINGS ----------------
 st.sidebar.header("🔄 Refresh Settings")
 refresh_interval = st.sidebar.slider("Interval (seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Auto Refresh", value=True)
@@ -35,21 +36,20 @@ def get_font(size=130):
     except:
         return ImageFont.load_default()
 
-# ---------------- NON-LINEAR TABLE ----------------
-# 🔴 YOU MUST CALIBRATE THIS ONCE
+# ---------------- NON-LINEAR CALIBRATION ----------------
+# 🔴 Tune these values once to match dial exactly
 MW_TABLE = [0, 100, 200, 300, 400, 500, 600, 700, 750]
 ANGLE_TABLE = [140, 110, 80, 40, 10, -20, -60, -110, -140]
 
 def get_angle(mw):
     mw = max(0, min(750, mw))
-
     for i in range(len(MW_TABLE) - 1):
         if MW_TABLE[i] <= mw <= MW_TABLE[i+1]:
             frac = (mw - MW_TABLE[i]) / (MW_TABLE[i+1] - MW_TABLE[i])
             return ANGLE_TABLE[i] + frac * (ANGLE_TABLE[i+1] - ANGLE_TABLE[i])
     return ANGLE_TABLE[0]
 
-# ---------------- DRAW ----------------
+# ---------------- DRAW FUNCTION ----------------
 def draw_display(value, image_file, dtype="mw"):
     base = load_base_image(image_file)
     if base is None:
@@ -70,8 +70,15 @@ def draw_display(value, image_file, dtype="mw"):
         color = (0, 0, 0, 255)
 
     bbox = draw.textbbox((0, 0), text, font=font)
+
+    # Default center
     x = (w - (bbox[2]-bbox[0])) / 2
     y = (h - (bbox[3]-bbox[1])) / 2
+
+    # 🔴 FIXED POSITION FOR TOTAL DIAL
+    if dtype == "total":
+        x = w * 0.50 - (bbox[2]-bbox[0]) / 2
+        y = h * 0.62 - (bbox[3]-bbox[1]) / 2   # shifted down
 
     draw.text((x, y), text, fill=color, font=font)
 
@@ -114,6 +121,7 @@ url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NC
 col1, col2, col3, col4, col5 = st.columns(5)
 s1, s2, s3, s4, s5 = col1.empty(), col2.empty(), col3.empty(), col4.empty(), col5.empty()
 
+# ---------------- LIVE PANEL ----------------
 @st.fragment(run_every=refresh_interval if auto_refresh else None)
 def live():
     try:
@@ -125,7 +133,10 @@ def live():
         u3 = str(data.get("UNIT3", {}).get("MW", "0"))
         hz = str(data.get("HZ", {}).get("HZ", "0"))
 
-        total = int(float(u1) + float(u2) + float(u3))
+        try:
+            total = int(float(u1) + float(u2) + float(u3))
+        except:
+            total = 0
 
         s1.image(draw_display(u1, "Gemini_U1.jpg"), use_container_width=True)
         s2.image(draw_display(u2, "Gemini_U2.jpg"), use_container_width=True)
