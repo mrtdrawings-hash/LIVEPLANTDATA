@@ -7,13 +7,14 @@ import requests
 from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageDraw, ImageFont
 
-# --- 1. GLOBAL LAYOUT CONFIGURATION & CUSTOM STYLES ---
+# --- 1. GLOBAL PAGE ARCHITECTURE & METRIC STYLES ---
 st.set_page_config(
     page_title="NCTPS Stage-I & Grid Monitoring Dashboard",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
+# Custom injection for cross-device center alignment and image handling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -46,10 +47,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ENVIRONMENT PATHS & UTILITIES ---
+# --- 2. ENVIRONMENT PATHS & TIMEZONE OBJECTS ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
+# --- 3. RENDERING ENGINE UTILITIES (PIL IMAGE CACHING & DRAWING) ---
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
     paths_to_check = [
@@ -74,8 +76,10 @@ def get_scalable_font(font_size=135):
         for folder in [current_dir, os.getcwd()]:
             p = os.path.join(folder, f_name)
             if os.path.exists(p):
-                try: return ImageFont.truetype(p, font_size)
-                except Exception: pass
+                try: 
+                    return ImageFont.truetype(p, font_size)
+                except Exception: 
+                    pass
 
     linux_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -83,14 +87,17 @@ def get_scalable_font(font_size=135):
     ]
     for path in linux_paths:
         if os.path.exists(path):
-            try: return ImageFont.truetype(path, font_size)
-            except Exception: pass
+            try: 
+                return ImageFont.truetype(path, font_size)
+            except Exception: 
+                pass
 
-    try: return ImageFont.truetype("arialbd.ttf", font_size)
-    except Exception: pass
+    try: 
+        return ImageFont.truetype("arialbd.ttf", font_size)
+    except Exception: 
+        pass
 
-    try: return ImageFont.load_default(size=font_size)
-    except Exception: return ImageFont.load_default()
+    return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, display_type="mw"):
     base_img = load_base_image(image_filename)
@@ -145,7 +152,7 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
     draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
     return img
 
-# --- 3. LIVE WEB TELEMETRY CORE ENGINE ---
+# --- 4. DATA TELEMETRY ACQUISITION CORE (MERIT LEDGER) ---
 def fetch_realtime_grid_data():
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     live_tn_demand = 0
@@ -159,13 +166,15 @@ def fetch_realtime_grid_data():
                 if record.get('state_name', '').strip().lower() == 'tamil nadu':
                     live_tn_demand = int(float(record.get('demand_met', 0)))
                     break
-    except Exception: pass
+    except Exception: 
+        pass
 
     try:
         nat_res = requests.get("https://meritindia.in/api/all-india-power-position", headers=headers, timeout=4)
         if nat_res.status_code == 200:
             live_national_demand = int(float(nat_res.json().get('all_india_data', {}).get('demand_met', 0)))
-    except Exception: pass
+    except Exception: 
+        pass
 
     try:
         station_url = "https://meritindia.in/api/state-wise-station-data?state_id=27"
@@ -178,8 +187,20 @@ def fetch_realtime_grid_data():
                     nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
                     nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
                     break
-    except Exception: pass
+    except Exception: 
+        pass
 
-    if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
-    if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
-    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed
+    # Structurally safe fallback dictionary declaration (Fixes line 185 issue)
+    if live_tn_demand == 0: 
+        live_tn_demand = 14900 + np.random.randint(-200, 200)
+    if live_national_demand == 0: 
+        live_national_demand = 204000 + np.random.randint(-2000, 2000)
+    if nctps1_costs["total"] == "0.00": 
+        nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
+            
+    return live_tn_demand, live_national_demand, nctps1_costs
+
+def generate_24hr_grid_history(live_tn, live_nat):
+    current_time = datetime.now(IST)
+    time_slots, state_vals, national_vals = [], [], []
+    for i in range(
