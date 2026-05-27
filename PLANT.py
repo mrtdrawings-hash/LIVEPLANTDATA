@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments for both Desktop and Mobile view scaling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -53,7 +52,6 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
-    """Safely reads and standardizes local background dial images."""
     paths_to_check = [
         os.path.join(current_dir, image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -71,7 +69,6 @@ def load_base_image(image_filename):
         return None
 
 def get_scalable_font(font_size=135):
-    """Resolves cross-platform font rendering engines cleanly."""
     font_names = ["digital-7.ttf", "font.ttf"]
     for f_name in font_names:
         for folder in [current_dir, os.getcwd()]:
@@ -96,7 +93,6 @@ def get_scalable_font(font_size=135):
     except Exception: return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, display_type="mw"):
-    """Overlays clean digital typography over static gauge backgrounds."""
     base_img = load_base_image(image_filename)
     if base_img is None:
         return None
@@ -129,7 +125,6 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         return None
 
 def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
-    """Draws metrics inside central grid demand dials."""
     try:
         img = Image.open(img_path).convert("RGB")
     except Exception:
@@ -218,7 +213,6 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
-    # Structural Fix: We isolate the target container slots cleanly inside our scoped execution unit
     generation_container = st.container()
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
@@ -251,7 +245,6 @@ with tab_generation:
                     except ValueError: pass
                 total_str = str(int(total_load)) if valid_count > 0 else "N/A"
 
-                # Standard display maps cleanly matching local image file sets
                 if u1 != "N/A":
                     img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
                     if img: slot1.image(img, use_container_width=True)
@@ -275,56 +268,29 @@ with tab_generation:
 # --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
 with tab_grid:
     st.title("National & State Grid Monitoring Dashboard")
-    st.markdown("### Real-Time Merit Dispatch & Demand Operations")
     
-    live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
-    grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
+    grid_container = st.container()
 
-    st.markdown(
-        f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
-        f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
-        unsafe_allow_html=True
-    )
+    # Fixed: State & Demand details isolated to run inside its own independent 60s window fragment
+    @st.fragment(run_every=60 if auto_refresh else None)
+    def run_grid_stream():
+        with grid_container:
+            st.markdown("### Real-Time Merit Dispatch & Demand Operations")
+            
+            live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
+            grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
 
-    c_state, c_national = st.columns(2)
-    with c_state:
-        st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("State matrix asset missing.")
+            st.markdown(
+                f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
+                f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
+                unsafe_allow_html=True
+            )
 
-    with c_national:
-        st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_national_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("National matrix asset missing.")
-
-    st.markdown("---")
-    st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
-    mc1, mc2, mc3 = st.columns(3)
-    with mc1: st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
-    with mc2: st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
-    with mc3: st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
-
-    st.markdown("---")
-    st.markdown("### Grid Load Curves (Trailing 24 Hours)")
-    trend_df_indexed = grid_df.set_index("Time")
-    chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True)
-
-    if chart_view == "Both":
-        st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
-    elif chart_view == "State Only":
-        st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
-    else:
-        st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
-
-# --- 6. GLOBAL REFRESH OVERRIDE LINK ---
-if auto_refresh:
-    time.sleep(60)
-    st.rerun()
+            c_state, c_national = st.columns(2)
+            with c_state:
+                st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
+                st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
+                _, d_center, _ = st.columns([1, 2, 1])
+                with d_center:
+                    img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
+                    if img: st.image(img, width=gauge_size, use_container_
