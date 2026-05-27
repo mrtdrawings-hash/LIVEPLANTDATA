@@ -97,7 +97,7 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         y = center_y - (text_h / 2) - bbox[1]
         draw.text((x, y), text_str, fill=text_color, font=font)
 
-        # --- NON-LINEAR PIECEWISE CO-ORDINATE SYSTEM FOR TOTAL MW DIAL ---
+        # --- LINEAR CO-ORDINATE SYSTEM FOR TOTAL MW DIAL ---
         if display_type == "total":
             try:
                 numeric_val = float(value)
@@ -110,9 +110,9 @@ def draw_digital_display(value, image_filename, display_type="mw"):
             dial_center_x = width * 0.50
             dial_center_y = height * 0.50
 
-            # True Physical Breakpoints calibrated directly against the image layout
+            # Corrected linear breakpoints matching physical layout (30 degrees per 75 MW)
             mw_bp = [0.0, 75.0, 150.0, 225.0, 300.0, 375.0, 450.0, 525.0, 600.0, 675.0, 750.0]
-            ang_bp = [145.0, 116.0, 86.0, 54.0, 24.0, 0.0, -24.0, -54.0, -86.0, -116.0, -145.0]
+            ang_bp = [150.0, 120.0, 90.0, 60.0, 30.0, 0.0, -30.0, -60.0, -90.0, -120.0, -150.0]
 
             angle_deg = ang_bp[0]
             for i in range(len(mw_bp) - 1):
