@@ -206,12 +206,12 @@ def generate_24hr_grid_history(live_tn, live_nat):
 
 # --- 4. SIDEBAR CONFIGURATION CONTROLS ---
 st.sidebar.header("🔄 Global Parameters")
-# Overriding the refresh rate defaults to 5 seconds to fulfill requirement cleanly
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
 # --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
+# FIX: Defined tabs up front to prevent any "NameError: tab_generation is not defined" errors
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
 # --- TAB 1: GENERATION SCADA FACE ---
@@ -230,39 +230,45 @@ with tab_generation:
                 res = requests.get(plant_url, timeout=4)
                 nctps_data = res.json() or {} if res.status_code == 200 else {}
                 
-                # --- HEARTBEAT MONITORING ENGINE ---
-                # Extract the current live run pulse from Firebase
-                current_run_pulse = nctps_data.get("LIVE", {}).get("DATA, None)
+                # --- HEARTBEAT TRACKING ENGINE (LIVE/DATA) ---
+                # Safely reads the numeric value from the new LIVE -> DATA node path
+                current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
+
+                # --- MATHEMATICAL SALT EXTRACTION ---
+                # Since the token is a changing timestamp number, we can extract 
+                # a predictable, hidden math salt using a modulo boundary.
+                salt = 0
+                if current_run_pulse is not None:
+                    try:
+                        pulse_num = int(current_run_pulse)
+                        # Extract the last 4 numeric digits safely to determine your offset factor
+                        salt = pulse_num % 10000  
+                    except (ValueError, TypeError):
+                        salt = 0
+
                 current_time_now = time.time()
                 sensor_fault_triggered = False
 
-                # Initialize tracking references safely in session state
                 if "last_run_pulse" not in st.session_state:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
-                
-                # Evaluation window verification logic
                 else:
-                    # If the data pulse hasn't changed
                     if current_run_pulse == st.session_state.last_run_pulse:
                         elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                        # If unchanged for 5 seconds or more, declare an active sensor freeze condition
                         if elapsed_duration >= 5.0:
                             sensor_fault_triggered = True
                     else:
-                        # Sensor is healthy and updating. Update state checkpoints.
                         st.session_state.last_run_pulse = current_run_pulse
                         st.session_state.last_pulse_timestamp = current_time_now
 
-                # --- UI PRESENTATION PATH SEPARATION ---
+                # --- UI RENDERING & VALIDATION LOOP ---
                 if sensor_fault_triggered or current_run_pulse is None:
                     st.error(
                         "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                        "has frozen or failed. Displaying stale values has been restricted due to data Error",
+                        "has frozen or failed. Displaying values has been restricted for safety.",
                         icon="🚨"
                     )
                 else:
-                    # Render operations matrix panels if the heartbeat validates cleanly
                     col1, col2, col3, col4, col5 = st.columns(5)
                     slot1 = col1.empty()
                     slot2 = col2.empty()
@@ -270,11 +276,20 @@ with tab_generation:
                     slot4 = col4.empty()
                     slot5 = col5.empty()
 
-                    u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-                    u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-                    u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-                    hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+                    fb_u1 = nctps_data.get("UNIT1", {}).get("MW", "N/A")
+                    fb_u2 = nctps_data.get("UNIT2", {}).get("MW", "N/A")
+                    fb_u3 = nctps_data.get("UNIT3", {}).get("MW", "N/A")
+                    fb_hz = nctps_data.get("HZ", {}).get("HZ", "N/A")
 
+                    # --- SUBTRACT THE DYNAMIC SALT OFFSET ---
+                    u1 = str(round(float(fb_u1) - salt)) if fb_u1 != "N/A" else "N/A"
+                    u2 = str(round(float(fb_u2) - salt)) if fb_u2 != "N/A" else "N/A"
+                    u3 = str(round(float(fb_u3) - salt)) if fb_u3 != "N/A" else "N/A"
+                    
+                    # Aligning Frequency offset by scaling salt by /100 to clean up the decimal range
+                    hz = f"{(float(fb_hz) - (salt / 100)):.2f}" if fb_hz != "N/A" else "N/A"
+
+                    # Calculate total generation sums across active operational units
                     total_load = 0.0
                     valid_count = 0
                     for v in [u1, u2, u3]:
@@ -359,5 +374,5 @@ with tab_grid:
 
 # --- 6. GLOBAL REFRESH OVERRIDE LINK ---
 if auto_refresh:
-    time.sleep(refresh_interval)  # Dynamically sync loop with user/default refresh config (5s)
+    time.sleep(refresh_interval)
     st.rerun()
