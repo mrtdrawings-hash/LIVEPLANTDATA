@@ -232,7 +232,7 @@ with tab_generation:
                 
                 # --- HEARTBEAT MONITORING ENGINE ---
                 # Extract the current live run pulse from Firebase
-                current_run_pulse = nctps_data.get("LIVE", {}).get("RUN", None)
+                current_run_pulse = nctps_data.get("LIVE", {}).get("DATA, None)
                 current_time_now = time.time()
                 sensor_fault_triggered = False
 
@@ -258,7 +258,7 @@ with tab_generation:
                 if sensor_fault_triggered or current_run_pulse is None:
                     st.error(
                         "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                        "has frozen or failed. Displaying stale values has been restricted for grid safety.",
+                        "has frozen or failed. Displaying stale values has been restricted due to data Error",
                         icon="🚨"
                     )
                 else:
