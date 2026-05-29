@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments for both Desktop and Mobile view scaling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -53,7 +52,6 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
-    """Safely reads and standardizes local background dial images."""
     paths_to_check = [
         os.path.join(current_dir, image_filename),
         os.path.join(os.getcwd(), image_filename),
@@ -71,7 +69,6 @@ def load_base_image(image_filename):
         return None
 
 def get_scalable_font(font_size=135):
-    """Resolves cross-platform font rendering engines cleanly."""
     font_names = ["digital-7.ttf", "font.ttf"]
     for f_name in font_names:
         for folder in [current_dir, os.getcwd()]:
@@ -79,24 +76,10 @@ def get_scalable_font(font_size=135):
             if os.path.exists(p):
                 try: return ImageFont.truetype(p, font_size)
                 except Exception: pass
-
-    linux_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-    ]
-    for path in linux_paths:
-        if os.path.exists(path):
-            try: return ImageFont.truetype(path, font_size)
-            except Exception: pass
-
     try: return ImageFont.truetype("arialbd.ttf", font_size)
-    except Exception: pass
-
-    try: return ImageFont.load_default(size=font_size)
     except Exception: return ImageFont.load_default()
 
 def draw_digital_display(value, image_filename, display_type="mw"):
-    """Overlays clean digital typography over static gauge backgrounds."""
     base_img = load_base_image(image_filename)
     if base_img is None:
         return None
@@ -129,7 +112,6 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         return None
 
 def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
-    """Draws metrics inside central grid demand dials."""
     try:
         img = Image.open(img_path).convert("RGB")
     except Exception:
@@ -204,15 +186,6 @@ def generate_24hr_grid_history(live_tn, live_nat):
     national_vals.append(live_nat)
     return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
 
-def get_math_salt_from_timestamp(timestamp_val):
-    """Recreates the exact rolling mathematical salt generated in Node-RED."""
-    try:
-        time_window = int(float(timestamp_val)) // 60
-        math_salt = (time_window % 4001) + 1000
-        return math_salt
-    except Exception:
-        return 0
-
 # --- 4. SIDEBAR CONFIGURATION CONTROLS ---
 st.sidebar.header("🔄 Global Parameters")
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
@@ -220,7 +193,6 @@ auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
 # --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
-# FIX: Tab assignment must precede layout references to prevent NameErrors!
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
 # --- TAB 1: GENERATION SCADA FACE ---
@@ -239,8 +211,23 @@ with tab_generation:
                 res = requests.get(plant_url, timeout=4)
                 nctps_data = res.json() or {} if res.status_code == 200 else {}
                 
-                # --- HEARTBEAT MONITORING ENGINE ---
-                current_run_pulse = nctps_data.get("LIVE", {}).get("RUN", None)
+                # --- HEARTBEAT & SALT EXTRACTION SYSTEM ---
+                raw_run_field = str(nctps_data.get("LIVE", {}).get("RUN", ""))
+                
+                current_run_pulse = None
+                salt = 0
+                
+                # Parse out the heartbeat token and the explicit math salt
+                if "-" in raw_run_field:
+                    parts = raw_run_field.split("-")
+                    current_run_pulse = parts[0]
+                    try:
+                        salt = int(parts[1])
+                    except ValueError:
+                        salt = 0
+                else:
+                    current_run_pulse = raw_run_field if raw_run_field else None
+
                 current_time_now = time.time()
                 sensor_fault_triggered = False
 
@@ -257,16 +244,13 @@ with tab_generation:
                         st.session_state.last_pulse_timestamp = current_time_now
 
                 # --- UI PRESENTATION MANAGEMENT ---
-                if sensor_fault_triggered or current_run_pulse is None:
+                if sensor_fault_triggered or current_run_pulse is None or current_run_pulse == "":
                     st.error(
                         "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
                         "has frozen or failed. Displaying stale values has been restricted for grid safety.",
                         icon="🚨"
                     )
                 else:
-                    # Reconstruct the dynamic salt using the RUN timestamp integer from Firebase
-                    salt = get_math_salt_from_timestamp(current_run_pulse)
-                    
                     col1, col2, col3, col4, col5 = st.columns(5)
                     slot1 = col1.empty()
                     slot2 = col2.empty()
@@ -274,13 +258,12 @@ with tab_generation:
                     slot4 = col4.empty()
                     slot5 = col5.empty()
 
-                    # Pull raw obfuscated values from the database JSON structure
                     fb_u1 = nctps_data.get("UNIT1", {}).get("MW", "N/A")
                     fb_u2 = nctps_data.get("UNIT2", {}).get("MW", "N/A")
                     fb_u3 = nctps_data.get("UNIT3", {}).get("MW", "N/A")
                     fb_hz = nctps_data.get("HZ", {}).get("HZ", "N/A")
 
-                    # De-obfuscate data values safely on-the-fly
+                    # Deduct the payload salt with perfect real-time accuracy
                     u1 = str(int(float(fb_u1) - salt)) if fb_u1 != "N/A" else "N/A"
                     u2 = str(int(float(fb_u2) - salt)) if fb_u2 != "N/A" else "N/A"
                     u3 = str(int(float(fb_u3) - salt)) if fb_u3 != "N/A" else "N/A"
