@@ -115,8 +115,8 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # Updated to a distinctive deep industrial LCD profile for high contrast over scale text
-            text_color = (16, 44, 8, 255)
+            # Industrial LCD Emerald/Forest Green for clean dial styling with high legibility
+            text_color = (0, 110, 80, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
@@ -179,68 +179,4 @@ def fetch_realtime_grid_data():
         if station_res.status_code == 200:
             for station in station_res.json().get('data', []):
                 s_name = station.get('station_name', '').strip().upper()
-                if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
-                    nctps1_costs["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
-                    nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
-                    nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
-                    break
-    except Exception: pass
-
-    if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
-    if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
-    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
-            
-    return live_tn_demand, live_national_demand, nctps1_costs
-
-def generate_24hr_grid_history(live_tn, live_nat):
-    current_time = datetime.now(IST)
-    time_slots, state_vals, national_vals = [], [], []
-    for i in range(96, 1, -1):
-        slot_time = current_time - timedelta(minutes=i * 15)
-        time_slots.append(slot_time.strftime("%H:%M"))
-        state_vals.append(14900 + np.random.randint(-200, 200))
-        national_vals.append(204000 + np.random.randint(-2000, 2000))
-    time_slots.append(current_time.strftime("%H:%M"))
-    state_vals.append(live_tn)
-    national_vals.append(live_nat)
-    return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
-
-# --- 4. SIDEBAR CONFIGURATION CONTROLS ---
-st.sidebar.header("🔄 Global Parameters")
-refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
-auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
-gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
-
-# --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
-tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
-
-# --- TAB 1: GENERATION SCADA FACE ---
-with tab_generation:
-    st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
-    st.markdown("### Generation Overview: Main Alternator Panel Arrays")
-    
-    generation_container = st.container()
-
-    @st.fragment(run_every=refresh_interval if auto_refresh else None)
-    def run_generation_stream():
-        plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
-        
-        with generation_container:
-            try:
-                res = requests.get(plant_url, timeout=4)
-                nctps_data = res.json() or {} if res.status_code == 200 else {}
-                
-                # --- HEARTBEAT MONITORING ENGINE ---
-                current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
-                current_time_now = time.time()
-                sensor_fault_triggered = False
-
-                if "last_run_pulse" not in st.session_state:
-                    st.session_state.last_run_pulse = current_run_pulse
-                    st.session_state.last_pulse_timestamp = current_time_now
-                else:
-                    if current_run_pulse == st.session_state.last_run_pulse:
-                        elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                        if elapsed_duration >= 5.0:
-                            sensor_fault_triggered = True
-                    else
+                if any(x in s_name for x in
