@@ -115,9 +115,8 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # Modified this color to White for individual MW displays (u1Mw, u2Mw, U3MW)
-            # Cyan color (previous): (0, 240, 255, 255)
-            text_color = (255, 255, 255, 255)
+            # Reverted to Industrial Cyan/Ice Blue for high legibility against the light silver dial faces
+            text_color = (0, 240, 255, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
@@ -208,7 +207,6 @@ def generate_24hr_grid_history(live_tn, live_nat):
 
 # --- 4. SIDEBAR CONFIGURATION CONTROLS ---
 st.sidebar.header("🔄 Global Parameters")
-# Overriding the refresh rate defaults to 5 seconds to fulfill requirement cleanly
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
@@ -233,26 +231,19 @@ with tab_generation:
                 nctps_data = res.json() or {} if res.status_code == 200 else {}
                 
                 # --- HEARTBEAT MONITORING ENGINE ---
-                # Extract the current live run pulse from Firebase
                 current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
                 current_time_now = time.time()
                 sensor_fault_triggered = False
 
-                # Initialize tracking references safely in session state
                 if "last_run_pulse" not in st.session_state:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
-                
-                # Evaluation window verification logic
                 else:
-                    # If the data pulse hasn't changed
                     if current_run_pulse == st.session_state.last_run_pulse:
                         elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                        # If unchanged for 5 seconds or more, declare an active sensor freeze condition
                         if elapsed_duration >= 5.0:
                             sensor_fault_triggered = True
                     else:
-                        # Sensor is healthy and updating. Update state checkpoints.
                         st.session_state.last_run_pulse = current_run_pulse
                         st.session_state.last_pulse_timestamp = current_time_now
 
@@ -264,7 +255,6 @@ with tab_generation:
                         icon="🚨"
                     )
                 else:
-                    # Render operations matrix panels if the heartbeat validates cleanly
                     col1, col2, col3, col4, col5 = st.columns(5)
                     slot1 = col1.empty()
                     slot2 = col2.empty()
