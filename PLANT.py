@@ -111,11 +111,12 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         text_str = str(value)
         
         if display_type == "hz":
-            text_color = (255, 235, 0, 255)
+            # Modified to a crisp industrial White for clear contrast against dark dashboard accents
+            text_color = (255, 255, 255, 255)
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # Brilliant Fluorescent Yellow for ultra-sharp visibility
+            # High-visibility Fluorescent Yellow for unit load counters
             text_color = (255, 255, 0, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
