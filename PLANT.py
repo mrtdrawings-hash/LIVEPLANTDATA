@@ -115,8 +115,8 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # Reverted to Industrial Cyan/Ice Blue for high legibility against the light silver dial faces
-            text_color = (0, 240, 255, 255)
+            # Updated to a crisp Charcoal/Carbon Black to perfectly match the dial markings
+            text_color = (30, 30, 30, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
