@@ -115,7 +115,9 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            text_color = (0, 240, 255, 255)
+            # Modified this color to White for individual MW displays (u1Mw, u2Mw, U3MW)
+            # Cyan color (previous): (0, 240, 255, 255)
+            text_color = (255, 255, 255, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
