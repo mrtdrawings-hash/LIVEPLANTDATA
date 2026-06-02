@@ -115,8 +115,8 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # Updated to a crisp Charcoal/Carbon Black to perfectly match the dial markings
-            text_color = (30, 30, 30, 255)
+            # Updated to a distinctive deep industrial LCD profile for high contrast over scale text
+            text_color = (16, 44, 8, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
         text_w = bbox[2] - bbox[0]
@@ -243,113 +243,4 @@ with tab_generation:
                         elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
                         if elapsed_duration >= 5.0:
                             sensor_fault_triggered = True
-                    else:
-                        st.session_state.last_run_pulse = current_run_pulse
-                        st.session_state.last_pulse_timestamp = current_time_now
-
-                # --- UI PRESENTATION PATH SEPARATION ---
-                if sensor_fault_triggered or current_run_pulse is None:
-                    st.error(
-                        "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                        "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
-                        icon="🚨"
-                    )
-                else:
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    slot1 = col1.empty()
-                    slot2 = col2.empty()
-                    slot3 = col3.empty()
-                    slot4 = col4.empty()
-                    slot5 = col5.empty()
-
-                    u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-                    u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-                    u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-                    hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-
-                    total_load = 0.0
-                    valid_count = 0
-                    for v in [u1, u2, u3]:
-                        try:
-                            total_load += float(v)
-                            valid_count += 1
-                        except ValueError: pass
-                    total_str = str(int(total_load)) if valid_count > 0 else "N/A"
-
-                    if u1 != "N/A":
-                        img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
-                        if img: slot1.image(img, use_container_width=True)
-                    if u2 != "N/A":
-                        img = draw_digital_display(u2, "Gemini_U2.jpg", display_type="mw")
-                        if img: slot2.image(img, use_container_width=True)
-                    if u3 != "N/A":
-                        img = draw_digital_display(u3, "Gemini_U3.jpg", display_type="mw")
-                        if img: slot3.image(img, use_container_width=True)
-                    if total_str != "N/A":
-                        img = draw_digital_display(total_str, "Gemini_T.jpg", display_type="total")
-                        if img: slot4.image(img, use_container_width=True)
-                    if hz != "N/A":
-                        img = draw_digital_display(hz, "HZ.jpg", display_type="hz")
-                        if img: slot5.image(img, use_container_width=True)
-                        
-            except Exception as e:
-                st.error(f"Generation Bus Interface Fault: {e}")
-
-    run_generation_stream()
-
-# --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
-with tab_grid:
-    st.title("National & State Grid Monitoring Dashboard")
-    st.markdown("### Real-Time Merit Dispatch & Demand Operations")
-    
-    live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
-    grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
-
-    st.markdown(
-        f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
-        f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
-        unsafe_allow_html=True
-    )
-
-    c_state, c_national = st.columns(2)
-    with c_state:
-        st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("State matrix asset missing.")
-
-    with c_national:
-        st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_national_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("National matrix asset missing.")
-
-    st.markdown("---")
-    st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
-    mc1, mc2, mc3 = st.columns(3)
-    with mc1: st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
-    with mc2: st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
-    with mc3: st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
-
-    st.markdown("---")
-    st.markdown("### Grid Load Curves (Trailing 24 Hours)")
-    trend_df_indexed = grid_df.set_index("Time")
-    chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True)
-
-    if chart_view == "Both":
-        st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
-    elif chart_view == "State Only":
-        st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
-    else:
-        st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
-
-# --- 6. GLOBAL REFRESH OVERRIDE LINK ---
-if auto_refresh:
-    time.sleep(refresh_interval)  # Dynamically sync loop with user/default refresh config (5s)
-    st.rerun()
+                    else
