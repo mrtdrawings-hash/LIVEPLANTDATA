@@ -7,52 +7,29 @@ import requests
 from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageDraw, ImageFont
 
-# --- 1. GLOBAL LAYOUT CONFIGURATION & CUSTOM STYLES ---
+# --- CONFIG ---
 st.set_page_config(
-    page_title="NCTPS Stage-I & Grid Monitoring Dashboard",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_title="NCTPS Stage-I Dashboard",
+    layout="wide"
 )
-
-st.markdown("""
-<style>
-div[data-testid="stMetric"] {
-    text-align: center !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-}
-div[data-testid="stMetricValue"] {
-    font-size: 2.2rem !important;
-    font-weight: 700 !important;
-}
-.stImage > img {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-    border-radius: 8px;
-}
-</style>
-""", unsafe_allow_html=True)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# --- IMAGE HELPERS ---
+# --- IMAGE LOAD ---
 @st.cache_data(show_spinner=False)
 def load_base_image(image_filename):
     paths = [
         os.path.join(current_dir, image_filename),
-        os.path.join(os.getcwd(), image_filename),
-        image_filename,
+        image_filename
     ]
-    target = next((p for p in paths if os.path.exists(p)), None)
-    if not target:
-        return None
-    img = Image.open(target).convert("RGBA")
-    bg = Image.new("RGB", img.size, (255, 255, 255))
-    bg.paste(img, (0, 0), img)
-    return bg.convert("RGBA")
+    for p in paths:
+        if os.path.exists(p):
+            img = Image.open(p).convert("RGBA")
+            bg = Image.new("RGB", img.size, (255,255,255))
+            bg.paste(img, (0,0), img)
+            return bg.convert("RGBA")
+    return None
 
 def get_font(size=135):
     try:
@@ -60,42 +37,52 @@ def get_font(size=135):
     except:
         return ImageFont.load_default()
 
-def draw_digital_display(value, image_filename):
-    base = load_base_image(image_filename)
-    if base is None:
+# --- ORIGINAL RENDER FUNCTION (RESTORED) ---
+def draw_digital_display(value, image_filename, display_type="mw"):
+    base_img = load_base_image(image_filename)
+    if base_img is None:
         return None
 
-    overlay = Image.new("RGBA", base.size, (0,0,0,0))
+    overlay = Image.new("RGBA", base_img.size, (0,0,0,0))
     draw = ImageDraw.Draw(overlay)
 
+    width, height = base_img.size
     font = get_font(135)
+
     text = str(value)
 
-    w, h = base.size
+    if display_type == "hz":
+        color = (255,255,255,255)
+    elif display_type == "total":
+        color = (0,0,0,255)
+    else:
+        color = (255,255,0,255)
+
     bbox = draw.textbbox((0,0), text, font=font)
-    tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
 
-    x = (w - tw) / 2
-    y = (h - th) / 2
+    x = (width - tw) / 2
+    y = (height - th) / 2
 
-    draw.text((x, y), text, fill=(255,255,0,255), font=font)
-    return Image.alpha_composite(base, overlay)
+    draw.text((x, y), text, fill=color, font=font)
+
+    return Image.alpha_composite(base_img, overlay)
 
 # --- SIDEBAR ---
-st.sidebar.header("Settings")
-refresh_interval = st.sidebar.slider("Refresh Seconds", 1, 30, 5)
+refresh_interval = st.sidebar.slider("Refresh (sec)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Auto Refresh", True)
 
 # --- TABS ---
 tab1, tab2 = st.tabs(["Generation", "Grid"])
 
 # =========================
-# 🔥 TAB 1 FIXED (NO FLICKER)
+# 🔥 GENERATION TAB (FIXED)
 # =========================
 with tab1:
-    st.title("NCTPS LIVE MW")
+    st.title("⚡ NCTPS LIVE MW DASHBOARD")
 
-    # ✅ CREATE STATIC CONTAINERS ONCE
+    # ✅ STATIC CONTAINERS (NO FLICKER)
     col1, col2, col3, col4, col5 = st.columns(5)
     slot1 = col1.empty()
     slot2 = col2.empty()
@@ -105,36 +92,62 @@ with tab1:
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def update_generation():
+
         url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
 
         try:
             res = requests.get(url, timeout=4)
             data = res.json() if res.status_code == 200 else {}
 
-            u1 = str(data.get("UNIT1", {}).get("MW", "0"))
-            u2 = str(data.get("UNIT2", {}).get("MW", "0"))
-            u3 = str(data.get("UNIT3", {}).get("MW", "0"))
-            hz = str(data.get("HZ", {}).get("HZ", "0"))
+            # ✅ SAFE VALUE HANDLING
+            def safe(v):
+                try:
+                    if v is None or v == "":
+                        return "0"
+                    return str(v)
+                except:
+                    return "0"
 
-            total = int(float(u1) + float(u2) + float(u3))
+            u1 = safe(data.get("UNIT1", {}).get("MW"))
+            u2 = safe(data.get("UNIT2", {}).get("MW"))
+            u3 = safe(data.get("UNIT3", {}).get("MW"))
+            hz = safe(data.get("HZ", {}).get("HZ"))
 
-            # ✅ ONLY UPDATE CONTENT (NO RE-CREATION)
-            slot1.image(draw_digital_display(u1, "Gemini_U1.jpg"), use_container_width=True)
-            slot2.image(draw_digital_display(u2, "Gemini_U2.jpg"), use_container_width=True)
-            slot3.image(draw_digital_display(u3, "Gemini_U3.jpg"), use_container_width=True)
-            slot4.image(draw_digital_display(total, "Gemini_T.jpg"), use_container_width=True)
-            slot5.image(draw_digital_display(hz, "HZ.jpg"), use_container_width=True)
+            # ✅ TOTAL
+            total = 0
+            for v in [u1, u2, u3]:
+                try:
+                    total += float(v)
+                except:
+                    pass
+            total_str = str(int(total))
+
+            # ✅ UPDATE ONLY CONTENT (NO FLICKER)
+            img1 = draw_digital_display(u1, "Gemini_U1.jpg", "mw")
+            if img1: slot1.image(img1, use_container_width=True)
+
+            img2 = draw_digital_display(u2, "Gemini_U2.jpg", "mw")
+            if img2: slot2.image(img2, use_container_width=True)
+
+            img3 = draw_digital_display(u3, "Gemini_U3.jpg", "mw")
+            if img3: slot3.image(img3, use_container_width=True)
+
+            img4 = draw_digital_display(total_str, "Gemini_T.jpg", "total")
+            if img4: slot4.image(img4, use_container_width=True)
+
+            img5 = draw_digital_display(hz, "HZ.jpg", "hz")
+            if img5: slot5.image(img5, use_container_width=True)
 
         except Exception as e:
-            st.error(e)
+            st.error(f"Update Error: {e}")
 
     update_generation()
 
 # =========================
-# 🌐 TAB 2 (UNCHANGED)
+# 🌐 GRID TAB
 # =========================
 with tab2:
-    st.title("Grid Monitoring")
+    st.title("🌐 Grid Monitoring")
 
     val1 = 15000 + np.random.randint(-200,200)
     val2 = 200000 + np.random.randint(-2000,2000)
