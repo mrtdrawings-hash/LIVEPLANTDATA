@@ -34,7 +34,7 @@ def get_font(size=100):
     except:
         return ImageFont.load_default()
 
-# --- 🔥 UPDATED DISPLAY FUNCTION ---
+# --- DISPLAY FUNCTION (FIXED CENTER + SIZE) ---
 def draw_digital_display(value, image_filename, display_type="mw"):
     base_img = load_base_image(image_filename)
     if base_img is None:
@@ -45,13 +45,11 @@ def draw_digital_display(value, image_filename, display_type="mw"):
 
     width, height = base_img.size
 
-    # ✅ AUTO FONT SIZE (BIGGER & RESPONSIVE)
     font_size = int(height * 0.22)
     font = get_font(font_size)
 
     text = str(value)
 
-    # ✅ COLORS
     if display_type == "hz":
         color = (255,255,255,255)
     elif display_type == "total":
@@ -59,12 +57,10 @@ def draw_digital_display(value, image_filename, display_type="mw"):
     else:
         color = (255,255,0,255)
 
-    # ✅ TEXT SIZE
     bbox = draw.textbbox((0,0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
 
-    # ✅ CENTER ALIGNMENT (TUNED)
     x = (width - tw) / 2
 
     y_offset = {
@@ -109,52 +105,44 @@ with tab1:
             data = res.json() if res.status_code == 200 else {}
 
             def safe(v):
-                try:
-                    if v is None or v == "":
-                        return "0"
-                    return str(v)
-                except:
+                if v in [None, ""]:
                     return "0"
+                return str(v)
 
             u1 = safe(data.get("UNIT1", {}).get("MW"))
             u2 = safe(data.get("UNIT2", {}).get("MW"))
             u3 = safe(data.get("UNIT3", {}).get("MW"))
             hz = safe(data.get("HZ", {}).get("HZ"))
 
-            # ✅ TOTAL
-            total = 0
-            for v in [u1, u2, u3]:
-                try:
-                    total += float(v)
-                except:
-                    pass
+            total = sum([float(v) if v.replace('.','',1).isdigit() else 0 for v in [u1,u2,u3]])
             total_str = str(int(total))
 
-            # 🔥 FORCE UI UPDATE (KEY FIX)
-            ts = str(time.time())
+            # ✅ CLEAR + UPDATE (NO FLICKER METHOD)
+            slot1.empty()
+            slot2.empty()
+            slot3.empty()
+            slot4.empty()
+            slot5.empty()
 
             img1 = draw_digital_display(u1, "Gemini_U1.jpg", "mw")
             if img1:
-                slot1.image(img1, use_container_width=True, key="u1_" + ts)
+                slot1.image(img1, use_container_width=True)
 
             img2 = draw_digital_display(u2, "Gemini_U2.jpg", "mw")
             if img2:
-                slot2.image(img2, use_container_width=True, key="u2_" + ts)
+                slot2.image(img2, use_container_width=True)
 
             img3 = draw_digital_display(u3, "Gemini_U3.jpg", "mw")
             if img3:
-                slot3.image(img3, use_container_width=True, key="u3_" + ts)
+                slot3.image(img3, use_container_width=True)
 
             img4 = draw_digital_display(total_str, "Gemini_T.jpg", "total")
             if img4:
-                slot4.image(img4, use_container_width=True, key="total_" + ts)
+                slot4.image(img4, use_container_width=True)
 
             img5 = draw_digital_display(hz, "HZ.jpg", "hz")
             if img5:
-                slot5.image(img5, use_container_width=True, key="hz_" + ts)
-
-            # 🔍 DEBUG (remove later)
-            # st.write("DEBUG:", u1, u2, u3, hz)
+                slot5.image(img5, use_container_width=True)
 
         except Exception as e:
             st.error(f"Update Error: {e}")
