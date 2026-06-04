@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments, desktop/mobile styles, and a custom container for the login card
+# Inject clean global alignments, desktop/mobile styles, and custom login aesthetics
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -44,13 +44,41 @@ st.markdown("""
         margin-right: auto;
         border-radius: 8px;
     }
-    /* Login Screen Container Custom Style */
+    
+    /* --- Login Window UI Elements --- */
     .login-box {
         background-color: #1e222b;
         padding: 30px;
         border-radius: 12px;
         border: 1px solid #3e4451;
-        margin-top: 50px;
+        margin-top: 30px;
+    }
+    .brand-banner {
+        background-color: #0e1117;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 20px;
+        border: 1px solid #2d3139;
+    }
+    .brand-banner h1 {
+        color: #ffffff !important;
+        margin: 0 !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: 800 !important;
+        letter-spacing: 2px;
+    }
+    /* Dark background with white text styling for the form button */
+    div[data-testid="stForm"] button {
+        background-color: #0e1117 !important;
+        color: #ffffff !important;
+        border: 1px solid #4f5b66 !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease;
+    }
+    div[data-testid="stForm"] button:hover {
+        background-color: #242933 !important;
+        border-color: #8892b0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -61,11 +89,21 @@ if "authenticated" not in st.session_state:
 
 # Render Login Gateway if Unauthorized
 if not st.session_state.authenticated:
-    _, center_col, _ = st.columns([1, 1.5, 1])
+    _, center_col, _ = st.columns([1, 1.3, 1])
     with center_col:
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-        st.title("🔒 SCADA Secure Access Portal")
-        st.subheader("NCTPS Stage-I Operations Engine")
+        
+        # Display Branded Corporate Logo
+        if os.path.exists("TNPGCL LOGO.jpg"):
+            st.image("TNPGCL LOGO.jpg", width=140)
+        elif os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "TNPGCL LOGO.jpg")):
+            st.image(os.path.join(os.path.dirname(os.path.abspath(__file__)), "TNPGCL LOGO.jpg"), width=140)
+            
+        # Dark panel heading block with White Text
+        st.markdown("<div class='brand-banner'><h1>TNPGCL</h1></div>", unsafe_allow_html=True)
+        
+        st.markdown("<h2 style='text-align: center; color: #ffffff; margin-bottom: 5px;'>🔒 SCADA Access Portal</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #a0aec0; margin-bottom: 25px;'>NCTPS Stage-I Operations Engine</p>", unsafe_allow_html=True)
         
         with st.form("security_gateway_form", clear_on_submit=False):
             username_input = st.text_input("User Name", placeholder="Enter official mobile / registry ID")
@@ -80,11 +118,11 @@ if not st.session_state.authenticated:
                     
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Check again right after form processing before stopping execution
+    # Catch State validation directly in execution flow to run instantly without page freeze
     if st.session_state.authenticated:
         st.rerun()
     else:
-        st.stop()  # Aborts execution of the dashboard until authenticated=True
+        st.stop()
 
 # --- 3. ENVIRONMENT PATHS & UTILITIES ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -249,12 +287,10 @@ refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# Provide a clean Logout option in the sidebar for control room switch shifts
 if st.sidebar.button("🔒 Secure System Logout"):
     st.session_state.authenticated = False
     st.rerun()
 
-# Initialize deep session keys tracking exact previous data strings to maintain static image states
 if "last_known_values" not in st.session_state:
     st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
@@ -277,7 +313,6 @@ with tab_generation:
             res = requests.get(plant_url, timeout=4)
             nctps_data = res.json() or {} if res.status_code == 200 else {}
             
-            # --- HEARTBEAT MONITORING ENGINE ---
             current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
             current_time_now = time.time()
             sensor_fault_triggered = False
@@ -294,7 +329,6 @@ with tab_generation:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
 
-            # --- UI PRESENTATION PATH ---
             if sensor_fault_triggered or current_run_pulse is None:
                 st.error(
                     "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
