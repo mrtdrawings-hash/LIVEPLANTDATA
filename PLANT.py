@@ -93,7 +93,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ENVIRONMENT PATHS & UTILITIES (Moved Up to Fix NameError) ---
+# --- 2. ENVIRONMENT PATHS & UTILITIES ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -128,72 +128,4 @@ if not st.session_state.authenticated:
         # 3. Form Input fields 
         with st.form("security_gateway_form", clear_on_submit=False):
             st.markdown("<h3 style='text-align: center; margin-top: 0; color: #1f2937;'>🔒 SCADA Secure Access Portal</h3>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;'>NCTPS Stage-I Operations Engine</p>", unsafe_allow_html=True)
-            
-            username_input = st.text_input("User Name", placeholder="Enter official mobile / registry ID")
-            password_input = st.text_input("Password", type="password", placeholder="••••••••")
-            submit_btn = st.form_submit_button("Authenticate & Initialize Panel")
-            
-            if submit_btn:
-                if username_input == "9445856695" and password_input == "Passme":
-                    st.session_state.authenticated = True
-                    st.rerun()
-                else:
-                    st.error("🚨 Invalid Credentials. Please verify inputs.")
-                    
-    st.stop()
-
-# --- 4. DATA PROCESSING & RENDERING ENGINE ---
-@st.cache_data(show_spinner=False)
-def load_base_image(image_filename):
-    """Safely reads and standardizes local background dial images."""
-    paths_to_check = [
-        os.path.join(current_dir, image_filename),
-        os.path.join(os.getcwd(), image_filename),
-        image_filename,
-    ]
-    target_path = next((p for p in paths_to_check if os.path.exists(p)), None)
-    if not target_path:
-        return None
-    try:
-        png_img = Image.open(target_path).convert("RGBA")
-        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
-        solid_bg.paste(png_img, (0, 0), png_img)
-        return solid_bg.convert("RGBA")
-    except Exception:
-        return None
-
-def get_scalable_font(font_size=135):
-    """Resolves cross-platform font rendering engines cleanly."""
-    font_names = ["digital-7.ttf", "font.ttf"]
-    for f_name in font_names:
-        for folder in [current_dir, os.getcwd()]:
-            p = os.path.join(folder, f_name)
-            if os.path.exists(p):
-                try: return ImageFont.truetype(p, font_size)
-                except Exception: pass
-
-    linux_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-    ]
-    for path in linux_paths:
-        if os.path.exists(path):
-            try: return ImageFont.truetype(path, font_size)
-            except Exception: pass
-
-    try: return ImageFont.truetype("arialbd.ttf", font_size)
-    except Exception: pass
-
-    try: return ImageFont.load_default(size=font_size)
-    except Exception: return ImageFont.load_default()
-
-def draw_digital_display(value, image_filename, display_type="mw"):
-    """Overlays clean digital typography over static gauge backgrounds."""
-    base_img = load_base_image(image_filename)
-    if base_img is None:
-        return None
-    try:
-        width, height = base_img.size
-        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
-        draw = ImageDraw.
+            st.markdown("<p style='text-align: center; color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;'>NCTPS Stage-I Operations Engine</p>",
