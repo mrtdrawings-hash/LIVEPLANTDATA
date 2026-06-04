@@ -59,17 +59,7 @@ st.markdown("""
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-def check_login():
-    """Validates specified system credentials."""
-    if st.session_state.get("username_input") == "9445856695" and st.session_state.get("password_input") == "Passme":
-        st.session_state.authenticated = True
-        st.success("🔓 Access Granted. Syncing SCADA Matrix...")
-        time.sleep(1)
-        st.rerun()
-    else:
-        st.error("🚨 Invalid Credentials. Please check your Username or Password.")
-
-# --- Render Login Gateway if Unauthorized ---
+# Render Login Gateway if Unauthorized
 if not st.session_state.authenticated:
     _, center_col, _ = st.columns([1, 1.5, 1])
     with center_col:
@@ -77,12 +67,18 @@ if not st.session_state.authenticated:
         st.title("🔒 SCADA Secure Access Portal")
         st.subheader("NCTPS Stage-I Operations Engine")
         
-        # Form structure prevents page reloading on every character keystroke
         with st.form("security_gateway_form", clear_on_submit=False):
-            st.text_input("User Name", key="username_input", placeholder="Enter official mobile / registry ID")
-            st.text_input("Password", type="password", key="password_input", placeholder="••••••••")
+            username_input = st.text_input("User Name", placeholder="Enter official mobile / registry ID")
+            password_input = st.text_input("Password", type="password", placeholder="••••••••")
+            submit_btn = st.form_submit_button("Authenticate & Initialize Panel", use_container_width=True)
             
-            submit_btn = st.form_submit_button("Authenticate & Initialize Panel", on_click=check_login, use_container_width=True)
+            if submit_btn:
+                if username_input == "9445856695" and password_input == "Passme":
+                    st.session_state.authenticated = True
+                    st.rerun()  # Now running safely in the main execution tree to instantly clear the screen
+                else:
+                    st.error("🚨 Invalid Credentials. Please check your Username or Password.")
+                    
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()  # Aborts execution of the dashboard until authenticated=True
 
@@ -182,214 +178,4 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
     h1 = bbox1[3] - bbox1[1]
     h2 = bbox2[3] - bbox2[1]
     
-    total_h = h1 + line_spacing + h2
-    start_y = (img_h - total_h) // 2 + 10
-    
-    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(255, 255, 255), font=font)
-    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
-    return img
-
-# --- 4. LIVE WEB TELEMETRY CORE ENGINE ---
-def fetch_realtime_grid_data():
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-    live_tn_demand = 0
-    live_national_demand = 0
-    nctps1_costs = {"fixed": "0.00", "variable": "0.00", "total": "0.00"}
-    
-    try:
-        state_res = requests.get("https://meritindia.in/api/state-wise-data", headers=headers, timeout=4)
-        if state_res.status_code == 200:
-            for record in state_res.json().get('data', []):
-                if record.get('state_name', '').strip().lower() == 'tamil nadu':
-                    live_tn_demand = int(float(record.get('demand_met', 0)))
-                    break
-    except Exception: pass
-
-    try:
-        nat_res = requests.get("https://meritindia.in/api/all-india-power-position", headers=headers, timeout=4)
-        if nat_res.status_code == 200:
-            live_national_demand = int(float(nat_res.json().get('all_india_data', {}).get('demand_met', 0)))
-    except Exception: pass
-
-    try:
-        station_url = "https://meritindia.in/api/state-wise-station-data?state_id=27"
-        station_res = requests.get(station_url, headers=headers, timeout=4)
-        if station_res.status_code == 200:
-            for station in station_res.json().get('data', []):
-                s_name = station.get('station_name', '').strip().upper()
-                if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
-                    nctps1_costs["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
-                    nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
-                    nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
-                    break
-    except Exception: pass
-
-    if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
-    if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
-    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
-            
-    return live_tn_demand, live_national_demand, nctps1_costs
-
-def generate_24hr_grid_history(live_tn, live_nat):
-    current_time = datetime.now(IST)
-    time_slots, state_vals, national_vals = [], [], []
-    for i in range(96, 1, -1):
-        slot_time = current_time - timedelta(minutes=i * 15)
-        time_slots.append(slot_time.strftime("%H:%M"))
-        state_vals.append(14900 + np.random.randint(-200, 200))
-        national_vals.append(204000 + np.random.randint(-2000, 2000))
-    time_slots.append(current_time.strftime("%H:%M"))
-    state_vals.append(live_tn)
-    national_vals.append(live_nat)
-    return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
-
-# --- 5. SIDEBAR CONFIGURATION CONTROLS ---
-st.sidebar.header("🔄 Global Parameters")
-refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
-auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
-gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
-
-# Provide a clean Logout option in the sidebar for control room switch shifts
-if st.sidebar.button("🔒 Secure System Logout"):
-    st.session_state.authenticated = False
-    st.rerun()
-
-# Initialize deep session keys tracking exact previous data strings to maintain static image states
-if "last_known_values" not in st.session_state:
-    st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
-
-# --- 6. SYSTEM NAVIGATION CONTROL MATRIX ---
-tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
-
-# --- TAB 1: GENERATION SCADA FACE ---
-with tab_generation:
-    st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
-    st.markdown("### Generation Overview: Main Alternator Panel Arrays")
-    
-    columns_bridge = st.columns(5)
-    slots = [col.empty() for col in columns_bridge]
-
-    @st.fragment(run_every=refresh_interval if auto_refresh else None)
-    def run_generation_stream():
-        plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
-        
-        try:
-            res = requests.get(plant_url, timeout=4)
-            nctps_data = res.json() or {} if res.status_code == 200 else {}
-            
-            # --- HEARTBEAT MONITORING ENGINE ---
-            current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
-            current_time_now = time.time()
-            sensor_fault_triggered = False
-
-            if "last_run_pulse" not in st.session_state:
-                st.session_state.last_run_pulse = current_run_pulse
-                st.session_state.last_pulse_timestamp = current_time_now
-            else:
-                if current_run_pulse == st.session_state.last_run_pulse:
-                    elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                    if elapsed_duration >= 5.0:
-                        sensor_fault_triggered = True
-                else:
-                    st.session_state.last_run_pulse = current_run_pulse
-                    st.session_state.last_pulse_timestamp = current_time_now
-
-            # --- UI PRESENTATION PATH ---
-            if sensor_fault_triggered or current_run_pulse is None:
-                st.error(
-                    "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                    "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
-                    icon="🚨"
-                )
-            else:
-                u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-                u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-                u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-                hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-
-                total_load = 0.0
-                valid_count = 0
-                for v in [u1, u2, u3]:
-                    try:
-                        total_load += float(v)
-                        valid_count += 1
-                    except ValueError: pass
-                total_str = str(int(total_load)) if valid_count > 0 else "N/A"
-
-                metrics_map = [
-                    ("u1", u1, "Gemini_U1.jpg", "mw", slots[0]),
-                    ("u2", u2, "Gemini_U2.jpg", "mw", slots[1]),
-                    ("u3", u3, "Gemini_U3.jpg", "mw", slots[2]),
-                    ("total", total_str, "Gemini_T.jpg", "total", slots[3]),
-                    ("hz", hz, "HZ.jpg", "hz", slots[4])
-                ]
-
-                for key, value, asset_path, disp_type, slot in metrics_map:
-                    if value != "N/A":
-                        # Only rewrite data into browser window if data points shift to maintain zero flicker
-                        if st.session_state.last_known_values[key] != value:
-                            compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
-                            if compiled_img:
-                                slot.image(compiled_img, use_container_width=True)
-                                st.session_state.last_known_values[key] = value
-                    else:
-                        if st.session_state.last_known_values[key] != "Offline":
-                            slot.metric("Status", "Offline")
-                            st.session_state.last_known_values[key] = "Offline"
-                        
-        except Exception as e:
-            st.error(f"Generation Bus Interface Fault: {e}")
-
-    run_generation_stream()
-
-# --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
-with tab_grid:
-    st.title("National & State Grid Monitoring Dashboard")
-    st.markdown("### Real-Time Merit Dispatch & Demand Operations")
-    
-    live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
-    grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
-
-    st.markdown(
-        f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
-        f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
-        unsafe_allow_html=True
-    )
-
-    c_state, c_national = st.columns(2)
-    with c_state:
-        st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("State matrix asset missing.")
-
-    with c_national:
-        st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_national_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("National matrix asset missing.")
-
-    st.markdown("---")
-    st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
-    mc1, mc2, mc3 = st.columns(3)
-    with mc1: st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
-    with mc2: st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
-    with mc3: st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
-
-    st.markdown("---")
-    st.markdown("### Grid Load Curves (Trailing 24 Hours)")
-    trend_df_indexed = grid_df.set_index("Time")
-    chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True)
-
-    if chart_view == "Both":
-        st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
-    elif chart_view == "State Only":
-        st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
-    else:
-        st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
+    total_h = h1 + line_spacing + h
