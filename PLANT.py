@@ -111,12 +111,10 @@ def draw_digital_display(value, image_filename, display_type="mw"):
         text_str = str(value)
         
         if display_type == "hz":
-            # Modified to a crisp industrial White for clear contrast against dark dashboard accents
             text_color = (255, 255, 255, 255)
         elif display_type == "total":
             text_color = (0, 0, 0, 255)  
         else:
-            # High-visibility Fluorescent Yellow for unit load counters
             text_color = (255, 255, 0, 255)
 
         bbox = draw.textbbox((0, 0), text_str, font=font)
@@ -212,6 +210,10 @@ refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
+# --- Initialize Image Render Cache in Session State ---
+if "image_cache" not in st.session_state:
+    st.session_state.image_cache = {}
+
 # --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
@@ -220,7 +222,6 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
-    # Isolated block function using @st.fragment to update without reloading the layout
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def run_generation_stream():
         plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
@@ -254,7 +255,6 @@ with tab_generation:
                     icon="🚨"
                 )
             else:
-                # Target layout containers are strictly evaluated within the local execution frame
                 cols = st.columns(5)
                 
                 u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
@@ -272,25 +272,32 @@ with tab_generation:
                 total_str = str(int(total_load)) if valid_count > 0 else "N/A"
 
                 metrics_map = [
-                    (u1, "Gemini_U1.jpg", "mw"),
-                    (u2, "Gemini_U2.jpg", "mw"),
-                    (u3, "Gemini_U3.jpg", "mw"),
-                    (total_str, "Gemini_T.jpg", "total"),
-                    (hz, "HZ.jpg", "hz")
+                    ("u1", u1, "Gemini_U1.jpg", "mw"),
+                    ("u2", u2, "Gemini_U2.jpg", "mw"),
+                    ("u3", u3, "Gemini_U3.jpg", "mw"),
+                    ("total", total_str, "Gemini_T.jpg", "total"),
+                    ("hz", hz, "HZ.jpg", "hz")
                 ]
 
-                for idx, (value, asset_path, disp_type) in enumerate(metrics_map):
+                for idx, (key, value, asset_path, disp_type) in enumerate(metrics_map):
                     if value != "N/A":
-                        img = draw_digital_display(value, asset_path, display_type=disp_type)
-                        if img:
-                            cols[idx].image(img, use_container_width=True)
+                        # State Cache Verification: Only rebuild image data if value transitions
+                        cache_key = f"{key}_{value}"
+                        if cache_key not in st.session_state.image_cache:
+                            compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
+                            if compiled_img:
+                                st.session_state.image_cache[cache_key] = compiled_img
+                        
+                        # Fetch verified image safely out of session cache state
+                        final_render = st.session_state.image_cache.get(cache_key)
+                        if final_render:
+                            cols[idx].image(final_render, use_container_width=True)
                     else:
                         cols[idx].metric("Status", "Offline")
                         
         except Exception as e:
             st.error(f"Generation Bus Interface Fault: {e}")
 
-    # Initialize the runtime pipeline
     run_generation_stream()
 
 # --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
