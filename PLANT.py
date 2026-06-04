@@ -210,9 +210,9 @@ refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# --- Initialize Image Render Cache in Session State ---
-if "image_cache" not in st.session_state:
-    st.session_state.image_cache = {}
+# Initialize deep session keys tracking exact previous data strings
+if "last_known_values" not in st.session_state:
+    st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
 # --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
@@ -222,6 +222,10 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
+    # We declare the container grid structures statically ONCE outside the fragment loop
+    columns_bridge = st.columns(5)
+    slots = [col.empty() for col in columns_bridge]
+
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def run_generation_stream():
         plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
@@ -255,8 +259,6 @@ with tab_generation:
                     icon="🚨"
                 )
             else:
-                cols = st.columns(5)
-                
                 u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
                 u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
                 u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
@@ -272,28 +274,27 @@ with tab_generation:
                 total_str = str(int(total_load)) if valid_count > 0 else "N/A"
 
                 metrics_map = [
-                    ("u1", u1, "Gemini_U1.jpg", "mw"),
-                    ("u2", u2, "Gemini_U2.jpg", "mw"),
-                    ("u3", u3, "Gemini_U3.jpg", "mw"),
-                    ("total", total_str, "Gemini_T.jpg", "total"),
-                    ("hz", hz, "HZ.jpg", "hz")
+                    ("u1", u1, "Gemini_U1.jpg", "mw", slots[0]),
+                    ("u2", u2, "Gemini_U2.jpg", "mw", slots[1]),
+                    ("u3", u3, "Gemini_U3.jpg", "mw", slots[2]),
+                    ("total", total_str, "Gemini_T.jpg", "total", slots[3]),
+                    ("hz", hz, "HZ.jpg", "hz", slots[4])
                 ]
 
-                for idx, (key, value, asset_path, disp_type) in enumerate(metrics_map):
+                for key, value, asset_path, disp_type, slot in metrics_map:
                     if value != "N/A":
-                        # State Cache Verification: Only rebuild image data if value transitions
-                        cache_key = f"{key}_{value}"
-                        if cache_key not in st.session_state.image_cache:
+                        # CRITICAL FIX: Only call st.image if the data value actually changed!
+                        # This skips rendering entirely when numbers are static, removing all LED fading.
+                        if st.session_state.last_known_values[key] != value:
                             compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
                             if compiled_img:
-                                st.session_state.image_cache[cache_key] = compiled_img
-                        
-                        # Fetch verified image safely out of session cache state
-                        final_render = st.session_state.image_cache.get(cache_key)
-                        if final_render:
-                            cols[idx].image(final_render, use_container_width=True)
+                                slot.image(compiled_img, use_container_width=True)
+                                # Update our history tracker
+                                st.session_state.last_known_values[key] = value
                     else:
-                        cols[idx].metric("Status", "Offline")
+                        if st.session_state.last_known_values[key] != "Offline":
+                            slot.metric("Status", "Offline")
+                            st.session_state.last_known_values[key] = "Offline"
                         
         except Exception as e:
             st.error(f"Generation Bus Interface Fault: {e}")
