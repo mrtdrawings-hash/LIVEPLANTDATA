@@ -220,82 +220,77 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
-    generation_container = st.container()
-
+    # Isolated block function using @st.fragment to update without reloading the layout
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def run_generation_stream():
         plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
         
-        with generation_container:
-            try:
-                res = requests.get(plant_url, timeout=4)
-                nctps_data = res.json() or {} if res.status_code == 200 else {}
-                
-                # --- HEARTBEAT MONITORING ENGINE ---
-                current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
-                current_time_now = time.time()
-                sensor_fault_triggered = False
+        try:
+            res = requests.get(plant_url, timeout=4)
+            nctps_data = res.json() or {} if res.status_code == 200 else {}
+            
+            # --- HEARTBEAT MONITORING ENGINE ---
+            current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
+            current_time_now = time.time()
+            sensor_fault_triggered = False
 
-                if "last_run_pulse" not in st.session_state:
+            if "last_run_pulse" not in st.session_state:
+                st.session_state.last_run_pulse = current_run_pulse
+                st.session_state.last_pulse_timestamp = current_time_now
+            else:
+                if current_run_pulse == st.session_state.last_run_pulse:
+                    elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
+                    if elapsed_duration >= 5.0:
+                        sensor_fault_triggered = True
+                else:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
-                else:
-                    if current_run_pulse == st.session_state.last_run_pulse:
-                        elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                        if elapsed_duration >= 5.0:
-                            sensor_fault_triggered = True
+
+            # --- UI PRESENTATION PATH ---
+            if sensor_fault_triggered or current_run_pulse is None:
+                st.error(
+                    "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
+                    "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
+                    icon="🚨"
+                )
+            else:
+                # Target layout containers are strictly evaluated within the local execution frame
+                cols = st.columns(5)
+                
+                u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
+                u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
+                u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
+                hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
+
+                total_load = 0.0
+                valid_count = 0
+                for v in [u1, u2, u3]:
+                    try:
+                        total_load += float(v)
+                        valid_count += 1
+                    except ValueError: pass
+                total_str = str(int(total_load)) if valid_count > 0 else "N/A"
+
+                metrics_map = [
+                    (u1, "Gemini_U1.jpg", "mw"),
+                    (u2, "Gemini_U2.jpg", "mw"),
+                    (u3, "Gemini_U3.jpg", "mw"),
+                    (total_str, "Gemini_T.jpg", "total"),
+                    (hz, "HZ.jpg", "hz")
+                ]
+
+                for idx, (value, asset_path, disp_type) in enumerate(metrics_map):
+                    if value != "N/A":
+                        img = draw_digital_display(value, asset_path, display_type=disp_type)
+                        if img:
+                            cols[idx].image(img, use_container_width=True)
                     else:
-                        st.session_state.last_run_pulse = current_run_pulse
-                        st.session_state.last_pulse_timestamp = current_time_now
-
-                # --- UI PRESENTATION PATH SEPARATION ---
-                if sensor_fault_triggered or current_run_pulse is None:
-                    st.error(
-                        "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                        "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
-                        icon="🚨"
-                    )
-                else:
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    slot1 = col1.empty()
-                    slot2 = col2.empty()
-                    slot3 = col3.empty()
-                    slot4 = col4.empty()
-                    slot5 = col5.empty()
-
-                    u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-                    u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-                    u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-                    hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-
-                    total_load = 0.0
-                    valid_count = 0
-                    for v in [u1, u2, u3]:
-                        try:
-                            total_load += float(v)
-                            valid_count += 1
-                        except ValueError: pass
-                    total_str = str(int(total_load)) if valid_count > 0 else "N/A"
-
-                    if u1 != "N/A":
-                        img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
-                        if img: slot1.image(img, use_container_width=True)
-                    if u2 != "N/A":
-                        img = draw_digital_display(u2, "Gemini_U2.jpg", display_type="mw")
-                        if img: slot2.image(img, use_container_width=True)
-                    if u3 != "N/A":
-                        img = draw_digital_display(u3, "Gemini_U3.jpg", display_type="mw")
-                        if img: slot3.image(img, use_container_width=True)
-                    if total_str != "N/A":
-                        img = draw_digital_display(total_str, "Gemini_T.jpg", display_type="total")
-                        if img: slot4.image(img, use_container_width=True)
-                    if hz != "N/A":
-                        img = draw_digital_display(hz, "HZ.jpg", display_type="hz")
-                        if img: slot5.image(img, use_container_width=True)
+                        cols[idx].metric("Status", "Offline")
                         
-            except Exception as e:
-                st.error(f"Generation Bus Interface Fault: {e}")
+        except Exception as e:
+            st.error(f"Generation Bus Interface Fault: {e}")
 
+    # Initialize the runtime pipeline
     run_generation_stream()
 
 # --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
@@ -349,8 +344,3 @@ with tab_grid:
         st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
     else:
         st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
-
-# --- 6. GLOBAL REFRESH OVERRIDE LINK ---
-if auto_refresh:
-    time.sleep(refresh_interval)  # Dynamically sync loop with user/default refresh config (5s)
-    st.rerun()
