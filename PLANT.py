@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments for both Desktop and Mobile view scaling
+# Inject clean global alignments, desktop/mobile styles, and a custom container for the login card
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -44,10 +44,49 @@ st.markdown("""
         margin-right: auto;
         border-radius: 8px;
     }
+    /* Login Screen Container Custom Style */
+    .login-box {
+        background-color: #1e222b;
+        padding: 30px;
+        border-radius: 12px;
+        border: 1px solid #3e4451;
+        margin-top: 50px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ENVIRONMENT PATHS & UTILITIES ---
+# --- 2. SECURITY CONTROL LAYER (AUTHENTICATION GATEWAY) ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+def check_login():
+    """Validates specified system credentials."""
+    if st.session_state.get("username_input") == "9445856695" and st.session_state.get("password_input") == "Passme":
+        st.session_state.authenticated = True
+        st.success("🔓 Access Granted. Syncing SCADA Matrix...")
+        time.sleep(1)
+        st.rerun()
+    else:
+        st.error("🚨 Invalid Credentials. Please check your Username or Password.")
+
+# --- Render Login Gateway if Unauthorized ---
+if not st.session_state.authenticated:
+    _, center_col, _ = st.columns([1, 1.5, 1])
+    with center_col:
+        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+        st.title("🔒 SCADA Secure Access Portal")
+        st.subheader("NCTPS Stage-I Operations Engine")
+        
+        # Form structure prevents page reloading on every character keystroke
+        with st.form("security_gateway_form", clear_on_submit=False):
+            st.text_input("User Name", key="username_input", placeholder="Enter official mobile / registry ID")
+            st.text_input("Password", type="password", key="password_input", placeholder="••••••••")
+            
+            submit_btn = st.form_submit_button("Authenticate & Initialize Panel", on_click=check_login, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()  # Aborts execution of the dashboard until authenticated=True
+
+# --- 3. ENVIRONMENT PATHS & UTILITIES ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -150,7 +189,7 @@ def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
     draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
     return img
 
-# --- 3. LIVE WEB TELEMETRY CORE ENGINE ---
+# --- 4. LIVE WEB TELEMETRY CORE ENGINE ---
 def fetch_realtime_grid_data():
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     live_tn_demand = 0
@@ -204,17 +243,22 @@ def generate_24hr_grid_history(live_tn, live_nat):
     national_vals.append(live_nat)
     return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
 
-# --- 4. SIDEBAR CONFIGURATION CONTROLS ---
+# --- 5. SIDEBAR CONFIGURATION CONTROLS ---
 st.sidebar.header("🔄 Global Parameters")
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# Initialize deep session keys tracking exact previous data strings
+# Provide a clean Logout option in the sidebar for control room switch shifts
+if st.sidebar.button("🔒 Secure System Logout"):
+    st.session_state.authenticated = False
+    st.rerun()
+
+# Initialize deep session keys tracking exact previous data strings to maintain static image states
 if "last_known_values" not in st.session_state:
     st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
-# --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
+# --- 6. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
 # --- TAB 1: GENERATION SCADA FACE ---
@@ -222,7 +266,6 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
-    # We declare the container grid structures statically ONCE outside the fragment loop
     columns_bridge = st.columns(5)
     slots = [col.empty() for col in columns_bridge]
 
@@ -283,13 +326,11 @@ with tab_generation:
 
                 for key, value, asset_path, disp_type, slot in metrics_map:
                     if value != "N/A":
-                        # CRITICAL FIX: Only call st.image if the data value actually changed!
-                        # This skips rendering entirely when numbers are static, removing all LED fading.
+                        # Only rewrite data into browser window if data points shift to maintain zero flicker
                         if st.session_state.last_known_values[key] != value:
                             compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
                             if compiled_img:
                                 slot.image(compiled_img, use_container_width=True)
-                                # Update our history tracker
                                 st.session_state.last_known_values[key] = value
                     else:
                         if st.session_state.last_known_values[key] != "Offline":
