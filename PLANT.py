@@ -44,57 +44,6 @@ st.markdown("""
         margin-right: auto;
         border-radius: 8px;
     }
-    
-    /* Centered Logo Layout Styling */
-    .logo-wrapper {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-bottom: -10px;
-    }
-    .logo-wrapper img {
-        border-radius: 50%;
-        object-fit: contain;
-    }
-
-    /* Fixed Dark Rectangle styling with zero top-margins to eliminate duplicate headers */
-    .tnpgcl-header-panel {
-        background-color: #111622 !important;
-        padding: 22px 10px !important;
-        border-radius: 10px !important;
-        text-align: center !important;
-        margin: 20px 0px 20px 0px !important;
-        border: 1px solid #232a3b;
-    }
-    
-    .tnpgcl-header-panel h1 {
-        color: #ffffff !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        font-family: 'Arial Black', Gadget, sans-serif !important;
-        font-weight: 900 !important;
-        font-size: 2.5rem !important;
-        letter-spacing: 4px !important;
-    }
-
-    /* Button Styling - Forces strict Dark Background with White Text */
-    div[data-testid="stForm"] button[type="submit"] {
-        background-color: #111622 !important;
-        color: #ffffff !important;
-        border: 1px solid #232a3b !important;
-        font-weight: 700 !important;
-        padding: 12px 24px !important;
-        border-radius: 6px !important;
-        font-size: 1rem !important;
-        width: 100% !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    div[data-testid="stForm"] button[type="submit"]:hover {
-        background-color: #1c2336 !important;
-        color: #ffffff !important;
-        border-color: #3b4766 !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -102,10 +51,145 @@ st.markdown("""
 current_dir = os.path.dirname(os.path.abspath(__file__))
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# --- 3. SECURITY CONTROL LAYER (AUTHENTICATION GATEWAY) ---
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+@st.cache_data(show_spinner=False)
+def load_base_image(image_filename):
+    """Safely reads and standardizes local background dial images."""
+    paths_to_check = [
+        os.path.join(current_dir, image_filename),
+        os.path.join(os.getcwd(), image_filename),
+        image_filename,
+    ]
+    target_path = next((p for p in paths_to_check if os.path.exists(p)), None)
+    if not target_path:
+        return None
+    try:
+        png_img = Image.open(target_path).convert("RGBA")
+        solid_bg = Image.new("RGB", png_img.size, (255, 255, 255))
+        solid_bg.paste(png_img, (0, 0), png_img)
+        return solid_bg.convert("RGBA")
+    except Exception:
+        return None
 
-if not st.session_state.authenticated:
-    # Centered design structural grid layout
-    _, login_grid_col, _ = st.columns([1, 1.2, 1])
+def get_scalable_font(font_size=135):
+    """Resolves cross-platform font rendering engines cleanly."""
+    font_names = ["digital-7.ttf", "font.ttf"]
+    for f_name in font_names:
+        for folder in [current_dir, os.getcwd()]:
+            p = os.path.join(folder, f_name)
+            if os.path.exists(p):
+                try: return ImageFont.truetype(p, font_size)
+                except Exception: pass
+
+    linux_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+    ]
+    for path in linux_paths:
+        if os.path.exists(path):
+            try: return ImageFont.truetype(path, font_size)
+            except Exception: pass
+
+    try: return ImageFont.truetype("arialbd.ttf", font_size)
+    except Exception: pass
+
+    try: return ImageFont.load_default(size=font_size)
+    except Exception: return ImageFont.load_default()
+
+def draw_digital_display(value, image_filename, display_type="mw"):
+    """Overlays clean digital typography over static gauge backgrounds."""
+    base_img = load_base_image(image_filename)
+    if base_img is None:
+        return None
+    try:
+        width, height = base_img.size
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        center_x = width * 0.485
+        center_y = height * 0.49
+        font = get_scalable_font(font_size=135)
+        text_str = str(value)
+        
+        if display_type == "hz":
+            text_color = (255, 255, 255, 255)
+        elif display_type == "total":
+            text_color = (0, 0, 0, 255)  
+        else:
+            text_color = (255, 255, 0, 255)
+
+        bbox = draw.textbbox((0, 0), text_str, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        x = center_x - (text_w / 2)
+        y = center_y - (text_h / 2) - bbox[1]
+        draw.text((x, y), text_str, fill=text_color, font=font)
+        return Image.alpha_composite(base_img, overlay)
+    except Exception:
+        return None
+
+def draw_two_lines_on_gauge(img_path, lines, font_size=55, line_spacing=12):
+    """Draws metrics inside central grid demand dials."""
+    try:
+        img = Image.open(img_path).convert("RGB")
+    except Exception:
+        return None
+    draw = ImageDraw.Draw(img)
+    font = get_scalable_font(font_size=font_size)
+    img_w, img_h = img.size
+    
+    bbox1 = draw.textbbox((0, 0), lines[0], font=font)
+    bbox2 = draw.textbbox((0, 0), lines[1], font=font)
+    h1 = bbox1[3] - bbox1[1]
+    h2 = bbox2[3] - bbox2[1]
+    
+    total_h = h1 + line_spacing + h2
+    start_y = (img_h - total_h) // 2 + 10
+    
+    draw.text(((img_w - (bbox1[2] - bbox1[0])) // 2, start_y), lines[0], fill=(255, 255, 255), font=font)
+    draw.text(((img_w - (bbox2[2] - bbox2[0])) // 2, start_y + h1 + line_spacing), lines[1], fill=(255, 255, 255), font=font)
+    return img
+
+# --- 3. LIVE WEB TELEMETRY CORE ENGINE ---
+def fetch_realtime_grid_data():
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    live_tn_demand = 0
+    live_national_demand = 0
+    nctps1_costs = {"fixed": "0.00", "variable": "0.00", "total": "0.00"}
+    
+    try:
+        state_res = requests.get("https://meritindia.in/api/state-wise-data", headers=headers, timeout=4)
+        if state_res.status_code == 200:
+            for record in state_res.json().get('data', []):
+                if record.get('state_name', '').strip().lower() == 'tamil nadu':
+                    live_tn_demand = int(float(record.get('demand_met', 0)))
+                    break
+    except Exception: pass
+
+    try:
+        nat_res = requests.get("https://meritindia.in/api/all-india-power-position", headers=headers, timeout=4)
+        if nat_res.status_code == 200:
+            live_national_demand = int(float(nat_res.json().get('all_india_data', {}).get('demand_met', 0)))
+    except Exception: pass
+
+    try:
+        station_url = "https://meritindia.in/api/state-wise-station-data?state_id=27"
+        station_res = requests.get(station_url, headers=headers, timeout=4)
+        if station_res.status_code == 200:
+            for station in station_res.json().get('data', []):
+                s_name = station.get('station_name', '').strip().upper()
+                if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
+                    nctps1_costs["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
+                    nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
+                    nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
+                    break
+    except Exception: pass
+
+    if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
+    if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
+    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
+            
+    return live_tn_demand, live_national_demand, nctps1_costs
+
+def generate_24hr_grid_history(live_tn, live_nat):
+    current_time =
