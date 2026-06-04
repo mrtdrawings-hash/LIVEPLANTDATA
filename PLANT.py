@@ -14,10 +14,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject CSS to remove default Streamlit spacing, clean duplicate elements, and fix themes
+# Inject clean global alignments for both Desktop and Mobile view scaling
 st.markdown("""
     <style>
-    /* Global Overrides */
     div[data-testid="stMetric"] {
         text-align: center !important;
         display: flex !important;
@@ -38,6 +37,12 @@ st.markdown("""
         h1 { font-size: 1.4rem !important; text-align: center; }
         h3 { font-size: 1.1rem !important; text-align: center; }
         div[data-testid="stMetricValue"] { font-size: 1.8rem !important; }
+    }
+    .stImage > img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        border-radius: 8px;
     }
     
     /* Centered Logo Layout Styling */
@@ -104,28 +109,3 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     # Centered design structural grid layout
     _, login_grid_col, _ = st.columns([1, 1.2, 1])
-    
-    with login_grid_col:
-        # 1. Render Logo directly using absolute path checks
-        logo_asset_name = "TNPGCL LOGO.jpg"
-        logo_located = False
-        target_logo_path = ""
-        
-        for p in [logo_asset_name, os.path.join(current_dir, logo_asset_name), os.path.join(os.getcwd(), logo_asset_name)]:
-            if os.path.exists(p):
-                target_logo_path = p
-                logo_located = True
-                break
-                
-        if logo_located:
-            st.markdown('<div class="logo-wrapper">', unsafe_allow_html=True)
-            st.image(target_logo_path, width=140)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # 2. Singular Dark Heading Block containing White Font
-        st.markdown('<div class="tnpgcl-header-panel"><h1>TNPGCL</h1></div>', unsafe_allow_html=True)
-        
-        # 3. Form Input fields 
-        with st.form("security_gateway_form", clear_on_submit=False):
-            st.markdown("<h3 style='text-align: center; margin-top: 0; color: #1f2937;'>🔒 SCADA Secure Access Portal</h3>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;'>NCTPS Stage-I Operations Engine</p>",
