@@ -214,6 +214,12 @@ gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 if "last_known_values" not in st.session_state:
     st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
+# TRACKING SCADA TIME MATRICES (For Sensor Epoch Tracking)
+if "prev_sensor_timestamp" not in st.session_state:
+    st.session_state.prev_sensor_timestamp = None
+if "last_changed_wall_time" not in st.session_state:
+    st.session_state.last_changed_wall_time = time.time()
+
 # --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
@@ -225,6 +231,9 @@ with tab_generation:
     # We declare the container grid structures statically ONCE outside the fragment loop
     columns_bridge = st.columns(5)
     slots = [col.empty() for col in columns_bridge]
+    
+    # A dedicated placeholder slot below the dials for the critical error alert banner
+    error_banner_slot = st.empty()
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def run_generation_stream():
@@ -234,31 +243,47 @@ with tab_generation:
             res = requests.get(plant_url, timeout=4)
             nctps_data = res.json() or {} if res.status_code == 200 else {}
             
-            # --- HEARTBEAT MONITORING ENGINE ---
-            current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
-            current_time_now = time.time()
+            # --- RIGOROUS SENSOR HEARTBEAT CHECK ---
+            # Extracts the numeric value under "LIVE" -> "DATA" node (e.g., 1780589611447)
+            current_sensor_timestamp = nctps_data.get("LIVE", {}).get("DATA", None)
+            current_wall_time = time.time()
             sensor_fault_triggered = False
 
-            if "last_run_pulse" not in st.session_state:
-                st.session_state.last_run_pulse = current_run_pulse
-                st.session_state.last_pulse_timestamp = current_time_now
-            else:
-                if current_run_pulse == st.session_state.last_run_pulse:
-                    elapsed_duration = current_time_now - st.session_state.last_pulse_timestamp
-                    if elapsed_duration >= 5.0:
-                        sensor_fault_triggered = True
+            if current_sensor_timestamp is not None:
+                # If it's the very first run, synchronize the baselines
+                if st.session_state.prev_sensor_timestamp is None:
+                    st.session_state.prev_sensor_timestamp = current_sensor_timestamp
+                    st.session_state.last_changed_wall_time = current_wall_time
                 else:
-                    st.session_state.last_run_pulse = current_run_pulse
-                    st.session_state.last_pulse_timestamp = current_time_now
+                    # If the timestamp has actually shifted/changed, update our tracking milestones
+                    if current_sensor_timestamp != st.session_state.prev_sensor_timestamp:
+                        st.session_state.prev_sensor_timestamp = current_sensor_timestamp
+                        st.session_state.last_changed_wall_time = current_wall_time
+                    else:
+                        # If the value hasn't changed, calculate how long the clock has been frozen
+                        frozen_duration = current_wall_time - st.session_state.last_changed_wall_time
+                        if frozen_duration >= 5.0:
+                            sensor_fault_triggered = True
+            else:
+                sensor_fault_triggered = True
 
-            # --- UI PRESENTATION PATH ---
-            if sensor_fault_triggered or current_run_pulse is None:
-                st.error(
+            # --- PRESENTATION EXECUTION MATRIX ---
+            if sensor_fault_triggered:
+                # 1. Clear out any residual dial interfaces in the panel immediately
+                for slot in slots:
+                    slot.empty()
+                # 2. Trigger the high-visibility data isolation alert
+                error_banner_slot.error(
                     "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                    "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
+                    "has frozen or failed for over 5 seconds. Displaying dials has been suspended for data integrity.",
                     icon="🚨"
                 )
+                # Reset cached state memory so dials rewrite clean once the sensor is online
+                st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
             else:
+                # Telemetry stream is active and valid, clear the error block
+                error_banner_slot.empty()
+
                 u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
                 u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
                 u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
@@ -283,13 +308,11 @@ with tab_generation:
 
                 for key, value, asset_path, disp_type, slot in metrics_map:
                     if value != "N/A":
-                        # CRITICAL FIX: Only call st.image if the data value actually changed!
-                        # This skips rendering entirely when numbers are static, removing all LED fading.
+                        # Only call st.image if the raw data string changes to keep visual fading at zero
                         if st.session_state.last_known_values[key] != value:
                             compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
                             if compiled_img:
                                 slot.image(compiled_img, use_container_width=True)
-                                # Update our history tracker
                                 st.session_state.last_known_values[key] = value
                     else:
                         if st.session_state.last_known_values[key] != "Offline":
@@ -297,7 +320,7 @@ with tab_generation:
                             st.session_state.last_known_values[key] = "Offline"
                         
         except Exception as e:
-            st.error(f"Generation Bus Interface Fault: {e}")
+            error_banner_slot.error(f"Generation Bus Interface Fault: {e}")
 
     run_generation_stream()
 
