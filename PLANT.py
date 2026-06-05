@@ -431,11 +431,11 @@ with tab_grid:
             "Telemetry Link": costs['status']
         })
     
-    # 1. Create Dataframe and sort it low-to-high based on the total operational cost per unit
+    # Create Dataframe and sort it low-to-high based on the total operational cost per unit
     df_cost_matrix = pd.DataFrame(cost_matrix_data)
     df_cost_matrix = df_cost_matrix.sort_values(by="Total Merit Cost / Unit", ascending=True)
 
-    # 2. Render the formatted matrix with column configurations and highlight constraints
+    # Render the formatted matrix with native configurations (Fixed the PillColumn crash)
     st.dataframe(
         df_cost_matrix,
         use_container_width=True,
@@ -461,15 +461,15 @@ with tab_grid:
                 format="₹ %.2f",
                 help="Combined ultimate cost prioritizing base load scheduling parameters"
             ),
-            "Telemetry Link": st.column_config.PillColumn(
+            "Telemetry Link": st.column_config.SelectboxColumn(
                 "Telemetry Link",
                 options=["Live Sync", "Cached"],
-                colors={"Live Sync": "green", "Cached": "orange"}
+                help="Indicates whether data stream is real-time or fall-back storage"
             )
         }
     )
 
-    # Custom highlighted notes bar highlighting the economic leader
+    # Highlight the current economic leader explicitly at the bottom of the grid block
     most_economical_plant = df_cost_matrix.iloc[0]["Station / Stage"]
     most_economical_cost = df_cost_matrix.iloc[0]["Total Merit Cost / Unit"]
     st.info(f"💡 **Merit Order Dispatch Notice:** Currently, **{most_economical_plant}** stands as the most economical dispatch option at **₹ {most_economical_cost:.2f} / Unit**.")
