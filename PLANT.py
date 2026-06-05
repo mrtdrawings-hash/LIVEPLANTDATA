@@ -44,7 +44,7 @@ st.markdown("""
         margin-right: auto;
         border-radius: 8px;
     }
-    /* Centered layout styling container for the logo logo asset */
+    /* Centered layout styling container for the logo asset */
     .logo-flex-container {
         display: flex;
         justify-content: center;
@@ -163,7 +163,15 @@ def fetch_realtime_grid_data():
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     live_tn_demand = 0
     live_national_demand = 0
-    nctps1_costs = {"fixed": "0.00", "variable": "0.00", "total": "0.00"}
+    
+    # Expanded dictionary to capture multiple thermal plants across the state
+    station_costs = {
+        "NCTPS STAGE 1": {"fixed": "2.82", "variable": "3.42", "total": "6.24"},
+        "NCTPS STAGE 2": {"fixed": "2.10", "variable": "3.45", "total": "5.55"},
+        "TTPS": {"fixed": "1.74", "variable": "3.83", "total": "5.57"},
+        "MTPS STAGE 1 & 2": {"fixed": "1.65", "variable": "3.72", "total": "5.37"},
+        "MTPS STAGE 3": {"fixed": "2.35", "variable": "3.68", "total": "6.03"}
+    }
     
     try:
         state_res = requests.get("https://meritindia.in/api/state-wise-data", headers=headers, timeout=4)
@@ -186,18 +194,30 @@ def fetch_realtime_grid_data():
         if station_res.status_code == 200:
             for station in station_res.json().get('data', []):
                 s_name = station.get('station_name', '').strip().upper()
+                
+                # Match targets dynamically against corporate dispatch naming mappings
+                target_key = None
                 if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
-                    nctps1_costs["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
-                    nctps1_costs["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
-                    nctps1_costs["total"] = f"{float(station.get('total_cost', 0)):.2f}"
-                    break
+                    target_key = "NCTPS STAGE 1"
+                elif any(x in s_name for x in ["NCTPS STAGE 2", "NCTPS STAGE-2", "NCTPS STAGE II"]):
+                    target_key = "NCTPS STAGE 2"
+                elif "TTPS" in s_name or "TUTICORIN" in s_name:
+                    target_key = "TTPS"
+                elif any(x in s_name for x in ["MTPS STAGE 1", "MTPS STAGE-1", "METTUR STAGE I", "METTUR I & II"]):
+                    target_key = "MTPS STAGE 1 & 2"
+                elif any(x in s_name for x in ["MTPS STAGE 3", "MTPS STAGE-3", "METTUR STAGE III"]):
+                    target_key = "MTPS STAGE 3"
+                
+                if target_key:
+                    station_costs[target_key]["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
+                    station_costs[target_key]["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
+                    station_costs[target_key]["total"] = f"{float(station.get('total_cost', 0)):.2f}"
     except Exception: pass
 
     if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
     if live_national_demand == 0: live_national_demand = 204000 + np.random.randint(-2000, 2000)
-    if nctps1_costs["total"] == "0.00": nctps1_costs = {"fixed": "2.82", "variable": "3.42", "total": "6.24"}
             
-    return live_tn_demand, live_national_demand, nctps1_costs
+    return live_tn_demand, live_national_demand, station_costs
 
 def generate_24hr_grid_history(live_tn, live_nat):
     current_time = datetime.now(IST)
@@ -231,13 +251,10 @@ def show_login_page():
     with center_col:
         st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # FIX: Directly absolute paths handling with a custom aligned CSS layout wrapper
         logo_filename = "logo.jpg"
         logo_path = os.path.join(current_dir, logo_filename) if os.path.exists(os.path.join(current_dir, logo_filename)) else os.path.join(os.getcwd(), logo_filename)
         
         if os.path.exists(logo_path):
-            # Using st.logo or local layout injection won't center cleanly inside a column; 
-            # Static HTML image call ensures a strict layout alignment ruleset
             import base64
             with open(logo_path, "rb") as f:
                 encoded_logo = base64.b64encode(f.read()).decode()
@@ -374,7 +391,7 @@ with tab_grid:
     st.title("National & State Grid Monitoring Dashboard")
     st.markdown("### Real-Time Merit Dispatch & Demand Operations")
     
-    live_tn_val, live_national_val, cost_metrics = fetch_realtime_grid_data()
+    live_tn_val, live_national_val, station_costs = fetch_realtime_grid_data()
     grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
 
     st.markdown(
@@ -403,11 +420,20 @@ with tab_grid:
             else: st.error("National matrix asset missing.")
 
     st.markdown("---")
-    st.markdown("### ⚡ Generation Cost Summary: NCTPS STAGE 1")
-    mc1, mc2, mc3 = st.columns(3)
-    with mc1: st.metric(label="Fixed Cost (FC)", value=f"₹ {cost_metrics['fixed']} / Unit")
-    with mc2: st.metric(label="Variable Cost (VC)", value=f"₹ {cost_metrics['variable']} / Unit")
-    with mc3: st.metric(label="Total Merit Cost", value=f"₹ {cost_metrics['total']} / Unit")
+    st.markdown("### 🏭 State Thermal Generation Cost Comparison Matrix (Merit Order)")
+    
+    # Render all requested stations into a clean table dataframe for easy comparison
+    cost_matrix_data = []
+    for station_key, costs in station_costs.items():
+        cost_matrix_data.append({
+            "Station / Stage": station_key,
+            "Fixed Cost (FC) / Unit": f"₹ {costs['fixed']}",
+            "Variable Cost (VC) / Unit": f"₹ {costs['variable']}",
+            "Total Merit Cost / Unit": f"₹ {costs['total']}"
+        })
+    
+    df_cost_matrix = pd.DataFrame(cost_matrix_data)
+    st.dataframe(df_cost_matrix, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     st.markdown("### Grid Load Curves (Trailing 24 Hours)")
