@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments for both Desktop and Mobile view scaling
+# Inject clean global alignments and high-contrast bold table styling
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -51,6 +51,21 @@ st.markdown("""
         align-items: center;
         width: 100%;
         margin-bottom: 10px;
+    }
+    
+    /* --- HIGH CONTRAST & BOLD TABLE STYLING --- */
+    /* Target all cell text inside the data frame to make it distinct and bold */
+    div[data-testid="stDataFrame"] div [role="cell"] {
+        font-weight: 700 !important;
+        color: #111111 !important;
+        font-size: 0.95rem !important;
+    }
+    
+    /* Specifically bold and highlight column header cells */
+    div[data-testid="stDataFrame"] div [role="columnheader"] {
+        font-weight: 800 !important;
+        color: #000000 !important;
+        background-color: #f0f2f6 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -335,153 +350,3 @@ with tab_generation:
                     if elapsed_duration >= 5.0:
                         sensor_fault_triggered = True
                 else:
-                    st.session_state.last_run_pulse = current_run_pulse
-                    st.session_state.last_pulse_timestamp = current_time_now
-
-            if sensor_fault_triggered or current_run_pulse is None:
-                st.error(
-                    "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
-                    "has frozen or failed. Displaying stale values has been restricted for Data Validity.",
-                    icon="🚨"
-                )
-            else:
-                u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
-                u2 = str(nctps_data.get("UNIT2", {}).get("MW", "N/A"))
-                u3 = str(nctps_data.get("UNIT3", {}).get("MW", "N/A"))
-                hz = str(nctps_data.get("HZ", {}).get("HZ", "N/A"))
-
-                total_load = 0.0
-                valid_count = 0
-                for v in [u1, u2, u3]:
-                    try:
-                        total_load += float(v)
-                        valid_count += 1
-                    except ValueError: pass
-                total_str = str(int(total_load)) if valid_count > 0 else "N/A"
-
-                metrics_map = [
-                    ("u1", u1, "Gemini_U1.jpg", "mw", slots[0]),
-                    ("u2", u2, "Gemini_U2.jpg", "mw", slots[1]),
-                    ("u3", u3, "Gemini_U3.jpg", "mw", slots[2]),
-                    ("total", total_str, "Gemini_T.jpg", "total", slots[3]),
-                    ("hz", hz, "HZ.jpg", "hz", slots[4])
-                ]
-
-                for key, value, asset_path, disp_type, slot in metrics_map:
-                    if value != "N/A":
-                        if st.session_state.last_known_values[key] != value:
-                            compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
-                            if compiled_img:
-                                slot.image(compiled_img, use_container_width=True)
-                                st.session_state.last_known_values[key] = value
-                    else:
-                        if st.session_state.last_known_values[key] != "Offline":
-                            slot.metric("Status", "Offline")
-                            st.session_state.last_known_values[key] = "Offline"
-                        
-        except Exception as e:
-            st.error(f"Generation Bus Interface Fault: {e}")
-
-    run_generation_stream()
-
-# --- TAB 2: SYSTEM MANAGEMENT & GRID CURVES ---
-with tab_grid:
-    st.title("National & State Grid Monitoring Dashboard")
-    st.markdown("### Real-Time Merit Dispatch & Demand Operations")
-    
-    live_tn_val, live_national_val, station_costs = fetch_realtime_grid_data()
-    grid_df = generate_24hr_grid_history(live_tn_val, live_national_val)
-
-    st.markdown(
-        f"<div style='font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; font-weight: bold;'>"
-        f"Grid Sync Timestamp: {datetime.now(IST).strftime('%H:%M:%S')} (IST)</div>", 
-        unsafe_allow_html=True
-    )
-
-    c_state, c_national = st.columns(2)
-    with c_state:
-        st.markdown("<h3 style='text-align: center;'>Tamil Nadu State Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live TN Demand", value=f"{live_tn_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_tn_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("State matrix asset missing.")
-
-    with c_national:
-        st.markdown("<h3 style='text-align: center;'>All India National Demand</h3>", unsafe_allow_html=True)
-        st.metric(label="Live National Demand", value=f"{live_national_val:,} MW")
-        _, d_center, _ = st.columns([1, 2, 1])
-        with d_center:
-            img = draw_two_lines_on_gauge(os.path.join(current_dir, "GAUGE.jpg"), [f"{live_national_val:,}", "MW"])
-            if img: st.image(img, width=gauge_size, use_container_width=False)
-            else: st.error("National matrix asset missing.")
-
-    st.markdown("---")
-    st.markdown("### 📊 State Thermal Generation Cost Comparison Matrix (Merit Order)")
-    
-    # Restructure cost records for presentation styling
-    cost_matrix_data = []
-    for station_key, costs in station_costs.items():
-        cost_matrix_data.append({
-            "Station / Stage": station_key,
-            "Fixed Cost (FC) / Unit": costs['fixed'],
-            "Variable Cost (VC) / Unit": costs['variable'],
-            "Total Merit Cost / Unit": costs['total'],
-            "Telemetry Link": costs['status']
-        })
-    
-    # Create Dataframe and sort it low-to-high based on the total operational cost per unit
-    df_cost_matrix = pd.DataFrame(cost_matrix_data)
-    df_cost_matrix = df_cost_matrix.sort_values(by="Total Merit Cost / Unit", ascending=True)
-
-    # Render the formatted matrix with native configurations (Fixed the PillColumn crash)
-    st.dataframe(
-        df_cost_matrix,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Station / Stage": st.column_config.TextColumn(
-                "Station / Stage",
-                help="Name of the State Thermal Plant Station",
-                width="medium"
-            ),
-            "Fixed Cost (FC) / Unit": st.column_config.NumberColumn(
-                "Fixed Cost (FC) / Unit",
-                format="₹ %.2f",
-                help="Fixed capacity charge component per kilowatt-hour"
-            ),
-            "Variable Cost (VC) / Unit": st.column_config.NumberColumn(
-                "Variable Cost (VC) / Unit",
-                format="₹ %.2f",
-                help="Fuel or variable charge component based on merit schedule"
-            ),
-            "Total Merit Cost / Unit": st.column_config.NumberColumn(
-                "Total Merit Cost / Unit",
-                format="₹ %.2f",
-                help="Combined ultimate cost prioritizing base load scheduling parameters"
-            ),
-            "Telemetry Link": st.column_config.SelectboxColumn(
-                "Telemetry Link",
-                options=["Live Sync", "Cached"],
-                help="Indicates whether data stream is real-time or fall-back storage"
-            )
-        }
-    )
-
-    # Highlight the current economic leader explicitly at the bottom of the grid block
-    most_economical_plant = df_cost_matrix.iloc[0]["Station / Stage"]
-    most_economical_cost = df_cost_matrix.iloc[0]["Total Merit Cost / Unit"]
-    st.info(f"💡 **Merit Order Dispatch Notice:** Currently, **{most_economical_plant}** stands as the most economical dispatch option at **₹ {most_economical_cost:.2f} / Unit**.")
-
-    st.markdown("---")
-    st.markdown("### Grid Load Curves (Trailing 24 Hours)")
-    trend_df_indexed = grid_df.set_index("Time")
-    chart_view = st.radio("Select Trend Line View:", ["Both", "State Only", "National Only"], horizontal=True)
-
-    if chart_view == "Both":
-        st.line_chart(trend_df_indexed, y=["State Demand (MW)", "National Demand (MW)"], color=["#00d2ff", "#ffaa00"])
-    elif chart_view == "State Only":
-        st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
-    else:
-        st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
