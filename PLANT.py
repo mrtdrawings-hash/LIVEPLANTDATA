@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inject clean global alignments for both Desktop and Mobile view scaling
+# Inject clean global alignments for both Dashboard and Login Portal views
 st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -43,6 +43,15 @@ st.markdown("""
         margin-left: auto;
         margin-right: auto;
         border-radius: 8px;
+    }
+    /* Login Box Container Styling */
+    .login-container {
+        background-color: #f9f9f9;
+        padding: 2.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        max-width: 450px;
+        margin: 0 auto;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -204,23 +213,97 @@ def generate_24hr_grid_history(live_tn, live_nat):
     national_vals.append(live_nat)
     return pd.DataFrame({"Time": time_slots, "State Demand (MW)": state_vals, "National Demand (MW)": national_vals})
 
-# --- 4. SIDEBAR CONFIGURATION CONTROLS ---
+
+# =========================================================================
+# --- 4. SCADA ACCESS CONTROL GATEKEEPER (LOGIN SECURITY LAYER) ---
+# =========================================================================
+
+# Static configurations for system administration
+ADMIN_PASSWORD = "Admin@NCTPS1"  # Define your master operational password here
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+def show_login_page():
+    """Renders a structured, sanitized control room entry terminal."""
+    _, center_col, _ = st.columns([1.2, 1.5, 1.2])
+    
+    with center_col:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Display Plant Logo Asset cleanly at the top center of the portal
+        logo_path = os.path.join(current_dir, "logo.jpg")
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=140)
+        else:
+            st.image(os.path.join(os.getcwd(), "logo.jpg"), width=140)
+            
+        st.markdown("<h2 style='text-align: center; margin-top: 10px;'>NCTPS STAGE-I</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: gray;'>SCADA Telemetry System Gatekeeper</p>", unsafe_allow_html=True)
+        
+        with st.form("scada_login_form", clear_on_submit=False):
+            username = st.text_input(
+                "Username (10-Digit Mobile Number)", 
+                max_chars=10, 
+                help="Provide your registered 10-digit mobile number."
+            ).strip()
+            
+            password = st.text_input(
+                "Operational Password", 
+                type="password", 
+                help="Provide your admin assigned protection system security token."
+            )
+            
+            submit_btn = st.form_submit_button("Authenticate & Connect", use_container_width=True)
+            
+            if submit_btn:
+                # 1. Validation Rule: Must be strictly numeric and exactly 10 digits long
+                if not username.isdigit() or len(username) != 10:
+                    st.error("❌ Access Denied: Username must be a valid 10-digit mobile number.")
+                # 2. Validation Rule: Password check matching admin parameters
+                elif password != ADMIN_PASSWORD:
+                    st.error("❌ Access Denied: Incorrect operational security token.")
+                else:
+                    st.session_state.authenticated = True
+                    st.success("⚡ System Connection Established! Synchronizing SCADA streams...")
+                    time.sleep(1.2)
+                    st.rerun()
+                    
+        # Informational operational constraints panel below the form boundaries
+        st.info(
+            "💡 **Default Login Recommendations:**\n"
+            "* **Username:** Any authorized 10-digit mobile terminal string (e.g., `9876543210`).\n"
+            f"* **Password:** Controlled via centralized server parameters (Default: `{ADMIN_PASSWORD}`)."
+        )
+
+# Execute verification before loading dashboard memory structures
+if not st.session_state.authenticated:
+    show_login_page()
+    st.stop()  # Strictly halt execution flow until verification completes
+
+# =========================================================================
+# --- 5. INITIALIZE STATE REGISTERS & SIDEBAR CONTROL NETWORKS ---
+# =========================================================================
+
+# Inject an interactive Log Out option directly into the panel sidebar for operator comfort
+if st.sidebar.button("🔒 Terminate SCADA Session"):
+    st.session_state.authenticated = False
+    st.rerun()
+
 st.sidebar.header("🔄 Global Parameters")
 refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5)
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# Initialize deep session keys tracking exact previous data strings
 if "last_known_values" not in st.session_state:
     st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
-# TRACKING SCADA TIME MATRICES (For Sensor Epoch Tracking)
 if "prev_sensor_timestamp" not in st.session_state:
     st.session_state.prev_sensor_timestamp = None
 if "last_changed_wall_time" not in st.session_state:
     st.session_state.last_changed_wall_time = time.time()
 
-# --- 5. SYSTEM NAVIGATION CONTROL MATRIX ---
+# --- 6. SYSTEM NAVIGATION CONTROL MATRIX ---
 tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIONAL & STATE DEMAND MATRIX"])
 
 # --- TAB 1: GENERATION SCADA FACE ---
@@ -228,11 +311,8 @@ with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
     
-    # We declare the container grid structures statically ONCE outside the fragment loop
     columns_bridge = st.columns(5)
     slots = [col.empty() for col in columns_bridge]
-    
-    # A dedicated placeholder slot below the dials for the critical error alert banner
     error_banner_slot = st.empty()
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
@@ -244,23 +324,19 @@ with tab_generation:
             nctps_data = res.json() or {} if res.status_code == 200 else {}
             
             # --- RIGOROUS SENSOR HEARTBEAT CHECK ---
-            # Extracts the numeric value under "LIVE" -> "DATA" node (e.g., 1780589611447)
             current_sensor_timestamp = nctps_data.get("LIVE", {}).get("DATA", None)
             current_wall_time = time.time()
             sensor_fault_triggered = False
 
             if current_sensor_timestamp is not None:
-                # If it's the very first run, synchronize the baselines
                 if st.session_state.prev_sensor_timestamp is None:
                     st.session_state.prev_sensor_timestamp = current_sensor_timestamp
                     st.session_state.last_changed_wall_time = current_wall_time
                 else:
-                    # If the timestamp has actually shifted/changed, update our tracking milestones
                     if current_sensor_timestamp != st.session_state.prev_sensor_timestamp:
                         st.session_state.prev_sensor_timestamp = current_sensor_timestamp
                         st.session_state.last_changed_wall_time = current_wall_time
                     else:
-                        # If the value hasn't changed, calculate how long the clock has been frozen
                         frozen_duration = current_wall_time - st.session_state.last_changed_wall_time
                         if frozen_duration >= 5.0:
                             sensor_fault_triggered = True
@@ -269,19 +345,15 @@ with tab_generation:
 
             # --- PRESENTATION EXECUTION MATRIX ---
             if sensor_fault_triggered:
-                # 1. Clear out any residual dial interfaces in the panel immediately
                 for slot in slots:
                     slot.empty()
-                # 2. Trigger the high-visibility data isolation alert
                 error_banner_slot.error(
                     "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
                     "has frozen or failed for over 5 seconds. Displaying dials has been suspended for data integrity.",
                     icon="🚨"
                 )
-                # Reset cached state memory so dials rewrite clean once the sensor is online
                 st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
             else:
-                # Telemetry stream is active and valid, clear the error block
                 error_banner_slot.empty()
 
                 u1 = str(nctps_data.get("UNIT1", {}).get("MW", "N/A"))
@@ -308,7 +380,6 @@ with tab_generation:
 
                 for key, value, asset_path, disp_type, slot in metrics_map:
                     if value != "N/A":
-                        # Only call st.image if the raw data string changes to keep visual fading at zero
                         if st.session_state.last_known_values[key] != value:
                             compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
                             if compiled_img:
