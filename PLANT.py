@@ -164,13 +164,13 @@ def fetch_realtime_grid_data():
     live_tn_demand = 0
     live_national_demand = 0
     
-    # Expanded dictionary to capture multiple thermal plants across the state
+    # Baseline design fallback values tracking structural operations
     station_costs = {
-        "NCTPS STAGE 1": {"fixed": "2.82", "variable": "3.42", "total": "6.24"},
-        "NCTPS STAGE 2": {"fixed": "2.10", "variable": "3.45", "total": "5.55"},
-        "TTPS": {"fixed": "1.74", "variable": "3.83", "total": "5.57"},
-        "MTPS STAGE 1 & 2": {"fixed": "1.65", "variable": "3.72", "total": "5.37"},
-        "MTPS STAGE 3": {"fixed": "2.35", "variable": "3.68", "total": "6.03"}
+        "NCTPS STAGE 1": {"fixed": 2.82, "variable": 3.42, "total": 6.24, "status": "Cached"},
+        "NCTPS STAGE 2": {"fixed": 2.10, "variable": 3.45, "total": 5.55, "status": "Cached"},
+        "TTPS": {"fixed": 1.74, "variable": 3.83, "total": 5.57, "status": "Cached"},
+        "MTPS STAGE 1 & 2": {"fixed": 1.65, "variable": 3.72, "total": 5.37, "status": "Cached"},
+        "MTPS STAGE 3": {"fixed": 2.35, "variable": 3.68, "total": 6.03, "status": "Cached"}
     }
     
     try:
@@ -195,7 +195,6 @@ def fetch_realtime_grid_data():
             for station in station_res.json().get('data', []):
                 s_name = station.get('station_name', '').strip().upper()
                 
-                # Match targets dynamically against corporate dispatch naming mappings
                 target_key = None
                 if any(x in s_name for x in ["NCTPS STAGE 1", "NCTPS STAGE-1", "NCTPS STAGE I"]):
                     target_key = "NCTPS STAGE 1"
@@ -209,9 +208,10 @@ def fetch_realtime_grid_data():
                     target_key = "MTPS STAGE 3"
                 
                 if target_key:
-                    station_costs[target_key]["fixed"] = f"{float(station.get('fixed_cost', 0)):.2f}"
-                    station_costs[target_key]["variable"] = f"{float(station.get('variable_cost', 0)):.2f}"
-                    station_costs[target_key]["total"] = f"{float(station.get('total_cost', 0)):.2f}"
+                    station_costs[target_key]["fixed"] = float(station.get('fixed_cost', 0))
+                    station_costs[target_key]["variable"] = float(station.get('variable_cost', 0))
+                    station_costs[target_key]["total"] = float(station.get('total_cost', 0))
+                    station_costs[target_key]["status"] = "Live Sync"
     except Exception: pass
 
     if live_tn_demand == 0: live_tn_demand = 14900 + np.random.randint(-200, 200)
@@ -322,7 +322,6 @@ with tab_generation:
             res = requests.get(plant_url, timeout=4)
             nctps_data = res.json() or {} if res.status_code == 200 else {}
             
-            # --- HEARTBEAT MONITORING ENGINE ---
             current_run_pulse = nctps_data.get("LIVE", {}).get("DATA", None)
             current_time_now = time.time()
             sensor_fault_triggered = False
@@ -339,7 +338,6 @@ with tab_generation:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
 
-            # --- UI PRESENTATION PATH ---
             if sensor_fault_triggered or current_run_pulse is None:
                 st.error(
                     "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
@@ -420,20 +418,61 @@ with tab_grid:
             else: st.error("National matrix asset missing.")
 
     st.markdown("---")
-    st.markdown("### 🏭 State Thermal Generation Cost Comparison Matrix (Merit Order)")
+    st.markdown("### 📊 State Thermal Generation Cost Comparison Matrix (Merit Order)")
     
-    # Render all requested stations into a clean table dataframe for easy comparison
+    # Restructure cost records for presentation styling
     cost_matrix_data = []
     for station_key, costs in station_costs.items():
         cost_matrix_data.append({
             "Station / Stage": station_key,
-            "Fixed Cost (FC) / Unit": f"₹ {costs['fixed']}",
-            "Variable Cost (VC) / Unit": f"₹ {costs['variable']}",
-            "Total Merit Cost / Unit": f"₹ {costs['total']}"
+            "Fixed Cost (FC) / Unit": costs['fixed'],
+            "Variable Cost (VC) / Unit": costs['variable'],
+            "Total Merit Cost / Unit": costs['total'],
+            "Telemetry Link": costs['status']
         })
     
+    # 1. Create Dataframe and sort it low-to-high based on the total operational cost per unit
     df_cost_matrix = pd.DataFrame(cost_matrix_data)
-    st.dataframe(df_cost_matrix, use_container_width=True, hide_index=True)
+    df_cost_matrix = df_cost_matrix.sort_values(by="Total Merit Cost / Unit", ascending=True)
+
+    # 2. Render the formatted matrix with column configurations and highlight constraints
+    st.dataframe(
+        df_cost_matrix,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Station / Stage": st.column_config.TextColumn(
+                "Station / Stage",
+                help="Name of the State Thermal Plant Station",
+                width="medium"
+            ),
+            "Fixed Cost (FC) / Unit": st.column_config.NumberColumn(
+                "Fixed Cost (FC) / Unit",
+                format="₹ %.2f",
+                help="Fixed capacity charge component per kilowatt-hour"
+            ),
+            "Variable Cost (VC) / Unit": st.column_config.NumberColumn(
+                "Variable Cost (VC) / Unit",
+                format="₹ %.2f",
+                help="Fuel or variable charge component based on merit schedule"
+            ),
+            "Total Merit Cost / Unit": st.column_config.NumberColumn(
+                "Total Merit Cost / Unit",
+                format="₹ %.2f",
+                help="Combined ultimate cost prioritizing base load scheduling parameters"
+            ),
+            "Telemetry Link": st.column_config.PillColumn(
+                "Telemetry Link",
+                options=["Live Sync", "Cached"],
+                colors={"Live Sync": "green", "Cached": "orange"}
+            )
+        }
+    )
+
+    # Custom highlighted notes bar highlighting the economic leader
+    most_economical_plant = df_cost_matrix.iloc[0]["Station / Stage"]
+    most_economical_cost = df_cost_matrix.iloc[0]["Total Merit Cost / Unit"]
+    st.info(f"💡 **Merit Order Dispatch Notice:** Currently, **{most_economical_plant}** stands as the most economical dispatch option at **₹ {most_economical_cost:.2f} / Unit**.")
 
     st.markdown("---")
     st.markdown("### Grid Load Curves (Trailing 24 Hours)")
