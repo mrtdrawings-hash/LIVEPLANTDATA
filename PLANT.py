@@ -210,7 +210,7 @@ refresh_interval = st.sidebar.slider("Scan Refresh Interval (Seconds)", 1, 30, 5
 auto_refresh = st.sidebar.checkbox("Enable Real-Time Scan Loop", value=True)
 gauge_size = st.sidebar.slider("Grid Dial Scale Adjustment", 150, 400, 220, 10)
 
-# Track values in state memory to stabilize image placeholder updates
+# Initialize deep session keys tracking exact previous data strings
 if "last_known_values" not in st.session_state:
     st.session_state.last_known_values = {"u1": None, "u2": None, "u3": None, "total": None, "hz": None}
 
@@ -221,18 +221,15 @@ tab_generation, tab_grid = st.tabs(["🏭 NCTPS STAGE-1 OPERATIONS", "🌐 NATIO
 with tab_generation:
     st.title("⚡ NCTPS 1 LIVE MW DASHBOARD ⚡")
     st.markdown("### Generation Overview: Main Alternator Panel Arrays")
-
-    # Fixed structural layout slots placed cleanly outside the fragment block
-    col1, col2, col3, col4, col5 = st.columns(5)
-    slot1 = col1.empty()
-    slot2 = col2.empty()
-    slot3 = col3.empty()
-    slot4 = col4.empty()
-    slot5 = col5.empty()
+    
+    # We declare the container grid structures statically ONCE outside the fragment loop
+    columns_bridge = st.columns(5)
+    slots = [col.empty() for col in columns_bridge]
 
     @st.fragment(run_every=refresh_interval if auto_refresh else None)
     def run_generation_stream():
         plant_url = "https://nctps1-594d5-default-rtdb.asia-southeast1.firebasedatabase.app/NCTPS1MW.json"
+        
         try:
             res = requests.get(plant_url, timeout=4)
             nctps_data = res.json() or {} if res.status_code == 200 else {}
@@ -254,7 +251,7 @@ with tab_generation:
                     st.session_state.last_run_pulse = current_run_pulse
                     st.session_state.last_pulse_timestamp = current_time_now
 
-            # --- UI PRESENTATION PATH SEPARATION ---
+            # --- UI PRESENTATION PATH ---
             if sensor_fault_triggered or current_run_pulse is None:
                 st.error(
                     "🛑 CRITICAL BUS INTERFACE TIMEOUT: Real-time telemetry feed from the physical MW sensor "
@@ -276,22 +273,29 @@ with tab_generation:
                     except ValueError: pass
                 total_str = str(int(total_load)) if valid_count > 0 else "N/A"
 
-                if u1 != "N/A":
-                    img = draw_digital_display(u1, "Gemini_U1.jpg", display_type="mw")
-                    if img: slot1.image(img, use_container_width=True)
-                if u2 != "N/A":
-                    img = draw_digital_display(u2, "Gemini_U2.jpg", display_type="mw")
-                    if img: slot2.image(img, use_container_width=True)
-                if u3 != "N/A":
-                    img = draw_digital_display(u3, "Gemini_U3.jpg", display_type="mw")
-                    if img: slot3.image(img, use_container_width=True)
-                if total_str != "N/A":
-                    img = draw_digital_display(total_str, "Gemini_T.jpg", display_type="total")
-                    if img: slot4.image(img, use_container_width=True)
-                if hz != "N/A":
-                    img = draw_digital_display(hz, "HZ.jpg", display_type="hz")
-                    if img: slot5.image(img, use_container_width=True)
-                    
+                metrics_map = [
+                    ("u1", u1, "Gemini_U1.jpg", "mw", slots[0]),
+                    ("u2", u2, "Gemini_U2.jpg", "mw", slots[1]),
+                    ("u3", u3, "Gemini_U3.jpg", "mw", slots[2]),
+                    ("total", total_str, "Gemini_T.jpg", "total", slots[3]),
+                    ("hz", hz, "HZ.jpg", "hz", slots[4])
+                ]
+
+                for key, value, asset_path, disp_type, slot in metrics_map:
+                    if value != "N/A":
+                        # CRITICAL FIX: Only call st.image if the data value actually changed!
+                        # This skips rendering entirely when numbers are static, removing all LED fading.
+                        if st.session_state.last_known_values[key] != value:
+                            compiled_img = draw_digital_display(value, asset_path, display_type=disp_type)
+                            if compiled_img:
+                                slot.image(compiled_img, use_container_width=True)
+                                # Update our history tracker
+                                st.session_state.last_known_values[key] = value
+                    else:
+                        if st.session_state.last_known_values[key] != "Offline":
+                            slot.metric("Status", "Offline")
+                            st.session_state.last_known_values[key] = "Offline"
+                        
         except Exception as e:
             st.error(f"Generation Bus Interface Fault: {e}")
 
@@ -348,6 +352,3 @@ with tab_grid:
         st.line_chart(trend_df_indexed, y="State Demand (MW)", color="#00d2ff")
     else:
         st.line_chart(trend_df_indexed, y="National Demand (MW)", color="#ffaa00")
-
-# --- 6. REMOVED GLOBAL ST.RERUN() ENGINE TO PREVENT BLANK SYSTEM RENDERS ---
-# The fragment's run_every loop handles real-time synchronization cleanly on its own.
